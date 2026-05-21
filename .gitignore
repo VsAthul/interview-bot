@@ -1,0 +1,7 @@
+.venv/
+.env
+uv.lock
+interview.db
+.python-version
+__pycache__/
+audio/audio_*.wav
