@@ -993,28 +993,10 @@
     </div>
 
     <!-- right eval panel -->
-    <aside class="iv-eval">
-      <div class="eval-header">Live Score</div>
+    <!-- <aside class="iv-eval">
+ 
 
-      <div class="score-ring-wrap">
-        <svg class="ring-svg" viewBox="0 0 90 90">
-          <circle class="ring-track" cx="45" cy="45" r="35"/>
-          <circle class="ring-fill" id="ring-fill" cx="45" cy="45" r="35"/>
-        </svg>
-        <div class="ring-label" id="ring-num">—</div>
-        <div class="ring-sub">running score</div>
-      </div>
-
-      <div class="feedback-item" id="fb-box">
-        <div class="fb-label">Last Feedback</div>
-        <div id="fb-text" style="color:var(--muted)">Waiting for first answer…</div>
-      </div>
-
-      <div class="feedback-item">
-        <div class="fb-label">Answered</div>
-        <div id="ans-count" style="font-family:'JetBrains Mono',monospace;font-size:1.1rem;color:var(--cyan)">0</div>
-      </div>
-    </aside>
+    </aside> -->
   </div>
 </div>
 
@@ -1091,6 +1073,8 @@
 ════════════════════════════════════════════════════════════ -->
 <script>
 const API = 'http://localhost:8000';
+let interviewEnded = false;
+let currentAudio = null;
 
 /* ─── App State ─────────────────────────────────────────────── */
 const S = {
@@ -1543,6 +1527,15 @@ async function submitAnswer() {
 
 /* ─── TTS ────────────────────────────────────────────────────── */
 async function ttsPlay(text) {
+
+  // STOP PREVIOUS AUDIO
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio.currentTime = 0;
+    currentAudio.src = "";
+    currentAudio = null;
+  }
+
   try {
     console.log("Sending TTS request:", text);
 
@@ -1564,22 +1557,17 @@ async function ttsPlay(text) {
 
     if (d.success && d.audio_url) {
 
-      const audio = new Audio(`${API}${d.audio_url}`);
+      currentAudio = new Audio(`${API}${d.audio_url}`);
 
-audio.controls = true;
-
-document.body.appendChild(audio);
-
-await audio.play();
-      audio.onloadeddata = () => {
+      currentAudio.onloadeddata = () => {
         console.log("Audio loaded");
       };
 
-      audio.onerror = (e) => {
+      currentAudio.onerror = (e) => {
         console.error("Audio error:", e);
       };
 
-      await audio.play();
+      await currentAudio.play();
 
     } else {
       console.error("TTS failed:", d);
@@ -1589,13 +1577,13 @@ await audio.play();
     console.error("TTS Exception:", err);
   }
 }
-
 /* ─── End Interview ──────────────────────────────────────────── */
 function confirmEnd() {
   if (confirm('End the interview now and generate your report?')) endAndReport();
 }
 
 async function endAndReport() {
+  interviewEnded = true;
   clearInterval(S.timerInterval);
   disableInput();
   addMsg('agent', 'Thank you for your time! Generating your performance report now…');
