@@ -410,7 +410,7 @@
     /* main layout */
     .iv-body {
       flex: 1; display: grid;
-      grid-template-columns: 260px 1fr 280px;
+      grid-template-columns: 260px 1fr;
       gap: 0;
       overflow: hidden;
       height: calc(100vh - 61px);
@@ -591,6 +591,11 @@
       cursor: pointer; display: grid; place-items: center;
       transition: all .2s;
     }
+    .disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
     .mic-btn:hover:not(:disabled) { border-color: var(--cyan); color: var(--cyan); }
     .mic-btn.recording {
       background: rgba(255,76,106,.12); border-color: var(--red); color: var(--red);
@@ -665,6 +670,34 @@
     /* ═══════════════════════════════════════════════
        PAGE 3 — REPORT
     ═══════════════════════════════════════════════ */
+.q-score-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: .85rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.q-score-item:last-child {
+  border-bottom: none;
+}
+
+.q-score-question {
+  flex: 1;
+  font-size: .85rem;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.q-score-mark {
+  min-width: 60px;
+  text-align: right;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  color: var(--cyan);
+}
+
+
     #pg-report {
       flex-direction: column;
       align-items: center;
@@ -993,28 +1026,7 @@
     </div>
 
     <!-- right eval panel -->
-    <aside class="iv-eval">
-      <div class="eval-header">Live Score</div>
-
-      <div class="score-ring-wrap">
-        <svg class="ring-svg" viewBox="0 0 90 90">
-          <circle class="ring-track" cx="45" cy="45" r="35"/>
-          <circle class="ring-fill" id="ring-fill" cx="45" cy="45" r="35"/>
-        </svg>
-        <div class="ring-label" id="ring-num">—</div>
-        <div class="ring-sub">running score</div>
-      </div>
-
-      <div class="feedback-item" id="fb-box">
-        <div class="fb-label">Last Feedback</div>
-        <div id="fb-text" style="color:var(--muted)">Waiting for first answer…</div>
-      </div>
-
-      <div class="feedback-item">
-        <div class="fb-label">Answered</div>
-        <div id="ans-count" style="font-family:'JetBrains Mono',monospace;font-size:1.1rem;color:var(--cyan)">0</div>
-      </div>
-    </aside>
+    
   </div>
 </div>
 
@@ -1078,6 +1090,11 @@
     <div id="pane-conversation" class="tab-pane">
       <div class="conv-list" id="conv-list"></div>
     </div>
+    <div class="fb-card" style="margin-top:1.25rem">
+  <h4>📝 Question-wise Scores</h4>
+
+  <div id="question-scores"></div>
+</div>
 
     <div class="report-actions">
       <button class="btn btn-ghost" onclick="newInterview()">← New Interview</button>
@@ -1389,6 +1406,10 @@ async function toggleMic() {
 
 async function startRec() {
   try {
+    if (S.aiSpeaking) {
+  console.log("AI is speaking. Recording blocked.");
+  return;
+}
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     S.audioChunks = [];
     S.mediaRecorder = new MediaRecorder(stream);
@@ -1480,68 +1501,120 @@ async function submitAnswer() {
   });
 
   // evaluate (for live score)
+  // evaluate silently in backend
   try {
     const evRes = await fetch(`${API}/api/reflection/evaluate`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        session_id: S.sessionId, question: S.currentQ, candidate_answer: txt,
+        session_id: S.sessionId,
+        question: S.currentQ,
+        candidate_answer: txt,
       }),
     });
+
     const evD = await evRes.json();
+
     if (evD.success) {
-      S.scores.push(evD.answer_score);
+
+      // only store internally
+      S.scores.push({
+      question: S.currentQ,
+      score: evD.answer_score
+    });
+
+      // update difficulty silently
       S.difficulty = ({
-        increase_difficulty: {easy:'medium',medium:'hard'},
-        decrease_difficulty: {medium:'easy',hard:'medium'},
+        increase_difficulty: { easy:'medium', medium:'hard' },
+        decrease_difficulty: { medium:'easy', hard:'medium' },
       }[evD.decision] || {})[S.difficulty] || S.difficulty;
-
-      const avg = S.scores.reduce((a,b) => a+b, 0) / S.scores.length;
-      updateRing(avg);
-      document.getElementById('fb-text').textContent = evD.feedback || '—';
-      document.getElementById('fb-text').style.color = 'var(--text)';
     }
-  } catch {}
 
-  S.answeredCount++;
-  document.getElementById('ans-count').textContent = S.answeredCount;
+  } catch (err) {
+    console.error("Evaluation error:", err);
+  }
 
+S.answeredCount++;
+
+const ansCountEl = document.getElementById('ans-count');
+
+if (ansCountEl) {
+  ansCountEl.textContent = S.answeredCount;
+}
   // done?
   if (S.questionNum >= S.maxQuestions) {
     await endAndReport(); return;
   }
 
   // next question
+  // next question
   showTyping();
+
   try {
+
+    console.log("Requesting next question...");
+
     const nRes = await fetch(`${API}/api/interview/next-question`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
       body: JSON.stringify({
         session_id: S.sessionId,
         previous_question: S.currentQ,
         candidate_answer: txt,
       }),
     });
-    const nD = await nRes.json();
-    hideTyping();
-    if (!nD.success) throw new Error(nD.error);
 
-    S.currentQ   = nD.question;
+    console.log("Next Question Response Status:", nRes.status);
+
+    const nD = await nRes.json();
+
+    console.log("Next Question Response Data:", nD);
+
+    hideTyping();
+
+    if (!nD.success) {
+      throw new Error(nD.error || 'Failed to generate next question');
+    }
+
+    // update state
+    S.currentQ = nD.question;
     S.currentQId = nD.question_id;
     S.difficulty = nD.difficulty_level || S.difficulty;
+
     S.questionNum++;
 
+    // render next question
     addMsg('agent', nD.question, true);
-    ttsPlay(nD.question);
+
+    // play voice
+    await ttsPlay(nD.question);
+
+    // update UI
     updateProgress();
+
+    // re-enable mic
     enableInput();
+
   } catch (err) {
+
+    console.error("NEXT QUESTION ERROR:", err);
+
     hideTyping();
-    addMsg('agent', 'I had trouble generating the next question. Please try again.');
+
+    addMsg(
+      'agent',
+      'I had trouble generating the next question.'
+    );
+
     enableInput();
   }
 }
 
 /* ─── TTS ────────────────────────────────────────────────────── */
+let ttsAudio = null;
+
 async function ttsPlay(text) {
   try {
     console.log("Sending TTS request:", text);
@@ -1564,24 +1637,60 @@ async function ttsPlay(text) {
 
     if (d.success && d.audio_url) {
 
-      const audio = new Audio(`${API}${d.audio_url}`);
+  // stop previous audio
+  if (ttsAudio) {
+    ttsAudio.pause();
+    ttsAudio.currentTime = 0;
+  }
 
-audio.controls = true;
+  // AI is speaking
+  S.aiSpeaking = true;
 
-document.body.appendChild(audio);
+  // disable mic button
+  const micBtn = document.getElementById('mic-btn');
 
-await audio.play();
-      audio.onloadeddata = () => {
-        console.log("Audio loaded");
-      };
+  if (micBtn) {
+    micBtn.disabled = true;
+    micBtn.classList.add('disabled');
+  }
 
-      audio.onerror = (e) => {
-        console.error("Audio error:", e);
-      };
+  // create audio
+  ttsAudio = new Audio(`${API}${d.audio_url}`);
 
-      await audio.play();
+  ttsAudio.controls = false;
+  ttsAudio.preload = 'auto';
 
-    } else {
+  ttsAudio.onloadeddata = () => {
+    console.log("Audio loaded");
+  };
+
+  ttsAudio.onerror = (e) => {
+    console.error("Audio error:", e);
+
+    // safety re-enable
+    S.aiSpeaking = false;
+
+    if (micBtn) {
+      micBtn.disabled = false;
+      micBtn.classList.remove('disabled');
+    }
+  };
+
+  // when AI finishes speaking
+  ttsAudio.onended = () => {
+
+    S.aiSpeaking = false;
+
+    if (micBtn) {
+      micBtn.disabled = false;
+      micBtn.classList.remove('disabled');
+    }
+
+    console.log("AI finished speaking");
+  };
+
+  await ttsAudio.play();
+} else {
       console.error("TTS failed:", d);
     }
 
@@ -1589,7 +1698,6 @@ await audio.play();
     console.error("TTS Exception:", err);
   }
 }
-
 /* ─── End Interview ──────────────────────────────────────────── */
 function confirmEnd() {
   if (confirm('End the interview now and generate your report?')) endAndReport();
@@ -1653,6 +1761,21 @@ function buildReport(r, conversation) {
       <div class="conv-text">${esc(m.message)}</div>
       <div class="conv-time">${m.timestamp ? new Date(m.timestamp).toLocaleTimeString() : ''}</div>
     </div>`).join('');
+
+    const qScores = document.getElementById('question-scores');
+
+qScores.innerHTML = S.scores.map((item, index) => `
+  <div class="q-score-item">
+    <div class="q-score-question">
+      <strong>Q${index + 1}.</strong>
+      ${esc(item.question)}
+    </div>
+
+    <div class="q-score-mark">
+      ${item.score}/10
+    </div>
+  </div>
+`).join('');
 }
 
 function switchTab(name, el) {
