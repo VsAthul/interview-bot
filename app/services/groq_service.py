@@ -42,6 +42,10 @@ async def generate_interview_question(
                 f"Adjust complexity based on experience level.\n"
                 f"Respond ONLY as valid JSON, no markdown, no extra text:\n"
                 f'{{ "question": "...", "topic": "...", "difficulty": "{difficulty}" }}'
+                f"\nUse the previous Q&A as context to avoid repetition:\n{history_text}"
+                f"only ask theory based questions, no coding problems or puzzles."
+                f"use blooms taxonomy to determine the difficulty level of the question."
+                f"don't ask the same question if it has already been asked in the previous Q&A context."
             )),
             HumanMessage(content=f"Recent Q&A:\n{history_text}\n\nGenerate the next question."),
         ]

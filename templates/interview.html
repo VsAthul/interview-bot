@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>NexusHire — Interview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="/static/css/style.css"/>
+  <style>
+    /* interview page fills viewport as a flex column */
+    body { display: flex; flex-direction: column; overflow-y: auto; }
+    .page-root { display: flex; flex-direction: column; flex: 1; }
+  </style>
+</head>
+<body>
+
+<div class="page-root">
+
+  <!-- ── Top nav ── -->
+  <nav class="iv-nav">
+    <div class="iv-nav-left">
+      <div class="logo-bar" style="margin:0">
+        <div class="logo-mark" style="width:28px;height:28px;font-size:.75rem">N</div>
+        <div class="logo-name" style="font-size:.9rem">Nexus<span>Hire</span></div>
+      </div>
+      <div class="live-chip"><div class="live-dot"></div>Live</div>
+    </div>
+
+    <div class="q-progress">
+      <div class="q-track" id="q-track"></div>
+      <span id="q-label" style="font-family:'JetBrains Mono',monospace">Q 0 / 7</span>
+    </div>
+
+    <span class="diff-tag diff-medium" id="diff-tag">Medium</span>
+  </nav>
+
+  <!-- ── Body grid ── -->
+  <div class="iv-body">
+
+    <!-- Left sidebar -->
+    <aside class="iv-sidebar">
+      <div class="cand-card">
+        <div class="cand-avatar" id="iv-av">A</div>
+        <div class="cand-name"   id="iv-name">—</div>
+        <div class="cand-role"   id="iv-role">—</div>
+        <div class="cand-exp"    id="iv-exp">⏱ 0 yrs</div>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-label">Skills</div>
+        <div class="skill-chips" id="iv-skills"></div>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-label">Elapsed Time</div>
+        <div class="timer-display" id="timer">00:00</div>
+      </div>
+
+      <div class="end-btn-wrap">
+        <button class="btn btn-ghost btn-full" style="font-size:.82rem" onclick="confirmEnd()">
+          End Interview
+        </button>
+      </div>
+    </aside>
+
+    <!-- Chat area -->
+    <div class="iv-chat">
+      <div class="chat-messages" id="chat-msgs"></div>
+
+      <div class="iv-input">
+        <div class="transcript-box" id="transcript">
+          Your answer will appear here after you record…
+        </div>
+
+        <div class="input-row">
+          <div class="mic-wrap">
+            <button class="mic-btn" id="mic-btn" onclick="toggleMic()" title="Click to record">
+              🎤
+            </button>
+          </div>
+          <button class="submit-btn" id="sub-btn" onclick="submitAnswer()" disabled>
+            Submit Answer →
+          </button>
+        </div>
+
+        <div class="mic-status" id="mic-status"></div>
+      </div>
+    </div>
+
+  </div><!-- /iv-body -->
+
+</div><!-- /page-root -->
+
+<script src="/static/js/app.js"></script>
+<script>
+  // boot interview once DOM is ready
+  document.addEventListener('DOMContentLoaded', initInterview);
+</script>
+</body>
+</html>
