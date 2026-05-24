@@ -45,6 +45,7 @@ async def generate_interview_question(
                 f"\nUse the previous Q&A as context to avoid repetition:\n{history_text}"
                 f"only ask theory based questions, no coding problems or puzzles."
                 f"use blooms taxonomy to determine the difficulty level of the question."
+                f"use blooms taxonomy to understand the candidate's answer and adjust the next question's difficulty accordingly."
                 f"don't ask the same question if it has already been asked in the previous Q&A context."
             )),
             HumanMessage(content=f"Recent Q&A:\n{history_text}\n\nGenerate the next question."),

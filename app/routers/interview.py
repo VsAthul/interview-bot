@@ -292,20 +292,29 @@ async def end_interview(
     if not session:
         raise SessionNotFoundError(data.session_id)
 
-    if session.agent_state:
+    # Check if report already exists
+    # Check if report already exists
+    existing_report = await db.execute(
+        select(Report).where(Report.session_id == data.session_id)
+    )
+
+    existing_report = existing_report.scalars().first()
+
+    # Generate report only if needed
+    if not existing_report and session.agent_state:
         state = _restore_state(session.agent_state, db)
-        state["is_complete"]    = True
-        state["candidate_answer"] = ""   # no answer this turn
-        # Run report_graph directly — generate_report node saves to DB
-        state = await report_graph.ainvoke(
+        state["is_complete"] = True
+        state["candidate_answer"] = ""
+
+        await report_graph.ainvoke(
             state,
             config={"run_name": f"end_{data.session_id}"},
         )
-        session.agent_state = None
-    else:
-        # Fallback: just mark completed
-        session.status       = "completed"
-        session.completed_at = datetime.utcnow()
+
+    # Always finalize session
+    session.status = "completed"
+    session.completed_at = datetime.utcnow()
+    session.agent_state = None
 
     await db.commit()
     return {"success": True, "message": "Interview ended successfully"}
@@ -325,7 +334,7 @@ async def generate_report_compat(
     result = await db.execute(
         select(Report).where(Report.session_id == data.session_id)
     )
-    report = result.scalar_one_or_none()
+    report = result.scalars().first()
 
     if report:
         return {
@@ -348,7 +357,7 @@ async def get_report(session_id: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(Report).where(Report.session_id == session_id)
     )
-    report = result.scalar_one_or_none()
+    report = result.scalars().first()
     if not report:
         raise SessionNotFoundError(session_id)
 

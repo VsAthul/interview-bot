@@ -477,11 +477,23 @@ async function submitAnswer() {
     S.answeredCount++;
 
     if (d.is_complete) {
-      // Graph ran generate_report — navigate to report page
-      saveState();
-      await endAndReport();
-      return;
-    }
+  // Interview already completed by graph
+  S.interviewEnded = true;
+
+  if (ttsAudio) {
+    ttsAudio.pause();
+    ttsAudio.currentTime = 0;
+    ttsAudio.src = '';
+    ttsAudio = null;
+  }
+
+  clearInterval(S.timerInterval);
+
+  saveState();
+
+  window.location.href = '/report';
+  return;
+}
 
     // Next question returned from graph
     S.currentQ    = d.question;
