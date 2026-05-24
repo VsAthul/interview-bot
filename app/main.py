@@ -1,13 +1,16 @@
 import os
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+
 from app.database import init_db
 from app.exceptions import register_exception_handlers
 from app.routers import candidate, interview, stt, tts, reflection
+
 
 os.makedirs("audio", exist_ok=True)
 
@@ -36,15 +39,34 @@ app.add_middleware(
 )
 
 app.mount("/audio", StaticFiles(directory="audio"), name="audio")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
-templates = Jinja2Templates(directory = "templates")
+templates = Jinja2Templates(directory="templates")
 
-@app.get("/", response_class = HTMLResponse)
+
+@app.get("/", response_class=HTMLResponse)
 async def ui(request: Request):
     return templates.TemplateResponse(
         request=request,
-        name="index.html"
-        )
+        name="index.html",
+    )
+
+
+@app.get("/interview", response_class=HTMLResponse)
+async def interview_ui(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="interview.html",
+    )
+
+
+@app.get("/report", response_class=HTMLResponse)
+async def report_ui(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="interview_report.html",
+    )
+
 
 register_exception_handlers(app)
 
@@ -53,4 +75,3 @@ app.include_router(interview.router)
 app.include_router(stt.router)
 app.include_router(tts.router)
 app.include_router(reflection.router)
-

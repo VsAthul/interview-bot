@@ -1,8 +1,24 @@
 # app/agents/nodes/load_candidate.py
+import json as _json
 from sqlalchemy import select
 from app.models import Candidate
 from app.agents.state import AgentState
 from app.exceptions import CandidateNotFoundError
+
+
+def _ensure_list(value) -> list:
+    """Coerce SQLite JSON column back to a Python list."""
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = _json.loads(value)
+            return parsed if isinstance(parsed, list) else []
+        except (ValueError, TypeError):
+            return []
+    return []
 
 
 async def load_candidate(state: AgentState) -> AgentState:
@@ -24,6 +40,6 @@ async def load_candidate(state: AgentState) -> AgentState:
             "name":       candidate.name,
             "role":       candidate.role,
             "experience": candidate.experience,
-            "skillset":   candidate.skillset,
+            "skillset":   _ensure_list(candidate.skillset),  # safe SQLite read
         }
     }

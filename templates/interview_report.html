@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>IncedeHire — Report</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="/static/css/style.css"/>
+</head>
+<body>
+
+<div id="pg-report" class="page-root">
+  <div class="report-wrap">
+
+    <!-- ── Header ── -->
+    <div style="margin-bottom:1.5rem">
+      <div class="logo-bar">
+        <div class="logo-mark">I</div>
+        <div class="logo-name">Incede<span>Hire</span></div>
+      </div>
+      <h1 style="font-size:1.6rem">Interview Report</h1>
+      <p class="sub" style="margin-bottom:0">Here's the complete evaluation for this session.</p>
+    </div>
+
+    <!-- ── Candidate + recommendation ── -->
+    <div class="report-top">
+      <div class="report-cand">
+        <h2 id="rpt-name">—</h2>
+        <p  id="rpt-meta">—</p>
+      </div>
+      <span class="rec-pill rec-onhold" id="rpt-rec">—</span>
+    </div>
+
+    <!-- ── Score cards ── -->
+    <div class="scores-row">
+      <div class="score-card">
+        <div class="score-num"      id="rpt-overall">—</div>
+        <div class="score-lbl">Overall Score</div>
+      </div>
+      <div class="score-card">
+        <div class="score-num tech" id="rpt-tech">—</div>
+        <div class="score-lbl">Technical Score</div>
+      </div>
+      <div class="score-card">
+        <div class="score-num comm" id="rpt-comm">—</div>
+        <div class="score-lbl">Communication</div>
+      </div>
+    </div>
+
+    <!-- ── Tabs ── -->
+    <div class="tab-bar">
+      <button class="tab-item on" onclick="switchTab('feedback', this)">📊 Feedback</button>
+      <button class="tab-item"   onclick="switchTab('conversation', this)">💬 Conversation</button>
+    </div>
+
+    <!-- Feedback tab -->
+    <div id="pane-feedback" class="tab-pane on">
+      <div class="fb-grid">
+        <div class="fb-card">
+          <h4>✅ Strengths</h4>
+          <ul class="fb-list strength-list" id="rpt-strengths"></ul>
+        </div>
+        <div class="fb-card">
+          <h4>📈 Areas to Improve</h4>
+          <ul class="fb-list improve-list" id="rpt-improve"></ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Conversation tab -->
+    <div id="pane-conversation" class="tab-pane">
+      <div class="conv-list" id="conv-list"></div>
+    </div>
+
+    <!-- ── Question-wise scores (always visible) ── -->
+    <div class="fb-card" style="margin-top:1.25rem">
+      <h4>📝 Question-wise Scores</h4>
+      <div id="question-scores"></div>
+    </div>
+
+    <!-- ── Actions ── -->
+    <div class="report-actions">
+      <button class="btn btn-ghost" onclick="newInterview()">← New Interview</button>
+    </div>
+
+  </div><!-- /report-wrap -->
+</div><!-- /pg-report -->
+
+<script src="/static/js/app.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', initReport);
+</script>
+</body>
+</html>

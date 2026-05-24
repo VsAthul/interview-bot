@@ -1,10 +1,25 @@
 # app/agents/nodes/generate_report.py
+import json as _json
 import uuid
 from datetime import datetime
 from sqlalchemy import select
 from app.agents.state import AgentState
 from app.models import Conversation, Report, InterviewSession
 from app.services.groq_service import generate_final_report
+
+
+def _ensure_list(value) -> list:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = _json.loads(value)
+            return parsed if isinstance(parsed, list) else []
+        except (ValueError, TypeError):
+            return []
+    return []
 
 
 async def generate_report(state: AgentState) -> AgentState:
@@ -26,7 +41,7 @@ async def generate_report(state: AgentState) -> AgentState:
     # Generate report via Groq
     report_data = await generate_final_report(state["candidate"], conv_list)
 
-    # Save report to DB
+    # Save report to DB with _ensure_list guarding against string-encoded lists
     report = Report(
         report_id=f"REP_{uuid.uuid4().hex[:6].upper()}",
         session_id=state["session_id"],
@@ -34,8 +49,8 @@ async def generate_report(state: AgentState) -> AgentState:
         overall_score=report_data.get("overall_score"),
         technical_score=report_data.get("technical_score"),
         communication_score=report_data.get("communication_score"),
-        strengths=report_data.get("strengths", []),
-        improvements=report_data.get("improvements", []),
+        strengths=_ensure_list(report_data.get("strengths")),
+        improvements=_ensure_list(report_data.get("improvements")),
         recommendation=report_data.get("recommendation", "On Hold"),
     )
     db.add(report)
@@ -47,8 +62,9 @@ async def generate_report(state: AgentState) -> AgentState:
     )
     session = sess_result.scalar_one_or_none()
     if session:
-        session.status = "completed"
+        session.status       = "completed"
         session.completed_at = datetime.utcnow()
+        session.agent_state  = None   # clear persisted state — interview is done
 
     await db.commit()
 
