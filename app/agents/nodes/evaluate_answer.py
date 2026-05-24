@@ -8,6 +8,24 @@ from app.models import Conversation
 from app.services.groq_service import evaluate_answer
 
 
+# ============================================================================
+# BLOOM TAXONOMY ORDER
+# ============================================================================
+
+BLOOM_ORDER = [
+    "remember",
+    "understand",
+    "apply",
+    "analyze",
+    "evaluate",
+    "create",
+]
+
+
+# ============================================================================
+# EVALUATE ANSWER NODE
+# ============================================================================
+
 async def evaluate_answer_node(state: AgentState) -> AgentState:
     """
     Evaluates candidate answer.
@@ -16,7 +34,8 @@ async def evaluate_answer_node(state: AgentState) -> AgentState:
     - Persist candidate response
     - Evaluate answer using LLM
     - Adjust difficulty
-    - Update in-memory interview state
+    - Adjust Bloom's taxonomy level
+    - Update interview memory state
     """
 
     db = state["db"]
@@ -40,7 +59,24 @@ async def evaluate_answer_node(state: AgentState) -> AgentState:
     await db.commit()
 
     # =====================================================================
-    # EVALUATE ANSWER
+    # DEFAULT FALLBACKS
+    # =====================================================================
+
+    score = 50.0
+
+    new_difficulty = state["difficulty"]
+
+    current_bloom = state.get(
+        "bloom_level",
+        "understand",
+    )
+
+    new_bloom = current_bloom
+
+    feedback = ""
+
+    # =====================================================================
+    # EVALUATE ANSWER USING LLM
     # =====================================================================
 
     try:
@@ -51,10 +87,19 @@ async def evaluate_answer_node(state: AgentState) -> AgentState:
             role=state["candidate"]["role"],
         )
 
+        # ================================================================
+        # SCORE
+        # ================================================================
+
         try:
             score = float(result.get("score", 50))
         except (TypeError, ValueError):
             score = 50.0
+
+        feedback = result.get(
+            "feedback",
+            "",
+        )
 
         # ================================================================
         # ADAPTIVE DIFFICULTY
@@ -84,11 +129,30 @@ async def evaluate_answer_node(state: AgentState) -> AgentState:
         else:
             new_difficulty = current
 
+        # ================================================================
+        # BLOOM TAXONOMY ADAPTATION
+        # ================================================================
+
+        idx = BLOOM_ORDER.index(current_bloom)
+
+        # Strong candidate → move cognitively upward
+        if score >= 85 and idx < len(BLOOM_ORDER) - 1:
+
+            new_bloom = BLOOM_ORDER[idx + 1]
+
+        # Weak candidate → move cognitively downward
+        elif score < 50 and idx > 0:
+
+            new_bloom = BLOOM_ORDER[idx - 1]
+
+        else:
+            new_bloom = current_bloom
+
     except Exception as e:
 
-        # Safe fallback
-        score = 50.0
-        new_difficulty = state["difficulty"]
+        # ================================================================
+        # SAFE FALLBACK
+        # ================================================================
 
         state["error"] = str(e)
 
@@ -100,11 +164,19 @@ async def evaluate_answer_node(state: AgentState) -> AgentState:
         {
             "question": state["current_question"],
             "answer": state["candidate_answer"],
+            "score": score,
+            "feedback": feedback,
+            "difficulty": new_difficulty,
+            "bloom_level": new_bloom,
         }
     ]
 
     state["scores"] = state["scores"] + [score]
+
     state["difficulty"] = new_difficulty
+
+    state["bloom_level"] = new_bloom
+
     state["conversation"] = updated_conversation
 
     return state
