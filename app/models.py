@@ -7,6 +7,7 @@ from app.database import Base
 def gen_id(prefix: str) -> str:
     return f"{prefix}_{uuid.uuid4().hex[:8].upper()}"
 
+
 class Candidate(Base):
     __tablename__ = "candidates"
 
@@ -16,7 +17,7 @@ class Candidate(Base):
     phone        = Column(String, nullable=True)
     role         = Column(String, nullable=False)
     experience   = Column(Integer, nullable=False)
-    skillset     = Column(JSON)        # stores Python list as JSON
+    skillset     = Column(JSON)
     created_at   = Column(DateTime, server_default=func.now())
 
 
@@ -26,7 +27,14 @@ class InterviewSession(Base):
     session_id   = Column(String, primary_key=True, default=lambda: gen_id("SESSION"))
     interview_id = Column(String, unique=True, nullable=False, default=lambda: gen_id("INT"))
     candidate_id = Column(String, nullable=False)
-    status       = Column(String, default="pending")  # pending / active / completed
+    status       = Column(String, default="pending")   # pending / active / completed
+
+    # ── LangGraph agent state persisted between HTTP requests ─────────────────
+    # Stores the full AgentState dict as JSON so the graph can resume
+    # on each answer submission without losing conversation history,
+    # scores, difficulty, or question count.
+    agent_state  = Column(JSON, nullable=True)
+
     started_at   = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
 
@@ -43,7 +51,7 @@ class Conversation(Base):
     interview_id    = Column(String, nullable=False)
     speaker         = Column(String, nullable=False)   # "agent" or "candidate"
     message         = Column(Text, nullable=False)
-    question_id     = Column(String, nullable=True)    # links answer back to question
+    question_id     = Column(String, nullable=True)
     timestamp       = Column(DateTime, server_default=func.now())
 
 

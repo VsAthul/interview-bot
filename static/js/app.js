@@ -320,10 +320,7 @@ function addMsg(role, text) {
       <div class="msg-meta">${time}</div>
     </div>`;
   wrap.appendChild(row);
-  wrap.scrollTo({
-  top: wrap.scrollHeight,
-  behavior: 'smooth'
-});
+  wrap.scrollTop = wrap.scrollHeight;
 }
 
 function showTyping() {
@@ -333,10 +330,7 @@ function showTyping() {
   el.className = 'msg-row agent'; el.id = 'typing-row';
   el.innerHTML = `<div class="msg-av">AI</div><div class="msg-body"><div class="typing-bubble"><div class="t-dot"></div><div class="t-dot"></div><div class="t-dot"></div></div></div>`;
   wrap.appendChild(el);
-  wrap.scrollTo({
-  top: wrap.scrollHeight,
-  behavior: 'smooth'
-});
+  wrap.scrollTop = wrap.scrollHeight;
 }
 
 function hideTyping() {
@@ -439,7 +433,7 @@ function toBase64(blob) {
   });
 }
 
-/* ── Submit Answer ── */
+/* ── Submit Answer — graph-driven via /submit-answer ── */
 async function submitAnswer() {
   const box = document.getElementById('transcript');
   const txt = box ? box.textContent.trim() : '';
@@ -454,61 +448,57 @@ async function submitAnswer() {
   if (sub) sub.disabled = true;
   if (st)  st.textContent = '';
 
-  // save answer (fire-and-forget)
-  fetch(`${API}/api/interview/answer`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ session_id: S.sessionId, question_id: S.currentQId, answer_text: txt }),
-  });
-
-  // evaluate silently for live score
-  try {
-    const evRes = await fetch(`${API}/api/reflection/evaluate`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: S.sessionId, question: S.currentQ, candidate_answer: txt }),
-    });
-    const evD = await evRes.json();
-    if (evD.success) {
-      S.scores.push({ question: S.currentQ, score: evD.answer_score });
-      S.difficulty = ({
-        increase_difficulty: { easy:'medium', medium:'hard' },
-        decrease_difficulty: { medium:'easy',  hard:'medium' },
-      }[evD.decision] || {})[S.difficulty] || S.difficulty;
-    }
-  } catch (err) { console.error('Evaluation error:', err); }
-
-  S.answeredCount++;
-  saveState();
-
-  // last question?
-  if (S.questionNum >= S.maxQuestions) {
-    await endAndReport(); return;
-  }
-
-  // fetch next question
   showTyping();
-  try {
-    const nRes = await fetch(`${API}/api/interview/next-question`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: S.sessionId, previous_question: S.currentQ, candidate_answer: txt }),
-    });
-    const nD = await nRes.json();
-    hideTyping();
-    if (!nD.success) throw new Error(nD.error || 'Failed to generate next question');
 
-    S.currentQ    = nD.question;
-    S.currentQId  = nD.question_id;
-    S.difficulty  = nD.difficulty_level || S.difficulty;
-    S.questionNum++;
+  try {
+    // Single call to graph-driven endpoint.
+    // The backend runs: evaluate_answer → check_completion →
+    //   generate_question (if more) OR generate_report (if done)
+    const res = await fetch(`${API}/api/interview/submit-answer`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id:  S.sessionId,
+        question_id: S.currentQId,
+        answer_text: txt,
+      }),
+    });
+    const d = await res.json();
+    hideTyping();
+
+    if (!d.success) throw new Error(d.error || 'Submission failed');
+
+    // Collect per-question score returned by the graph
+    if (d.last_score !== null && d.last_score !== undefined) {
+      S.scores.push({
+        question: d.last_question || S.currentQ,
+        score:    Math.round(d.last_score / 10),  // graph stores 0-100, display as /10
+      });
+    }
+    S.answeredCount++;
+
+    if (d.is_complete) {
+      // Graph ran generate_report — navigate to report page
+      saveState();
+      await endAndReport();
+      return;
+    }
+
+    // Next question returned from graph
+    S.currentQ    = d.question;
+    S.currentQId  = d.question_id;
+    S.difficulty  = d.difficulty_level || S.difficulty;
+    S.questionNum = d.question_number  || S.questionNum + 1;
     saveState();
 
-    addMsg('agent', nD.question);
-    await ttsPlay(nD.question);
+    addMsg('agent', d.question);
+    await ttsPlay(d.question);
     updateProgress();
     enableInput();
+
   } catch (err) {
-    console.error('Next question error:', err);
+    console.error('Submit answer error:', err);
     hideTyping();
-    addMsg('agent', 'I had trouble generating the next question.');
+    addMsg('agent', 'I had trouble processing your answer. Please try again.');
     enableInput();
   }
 }
@@ -553,7 +543,7 @@ function confirmEnd() {
 
 async function endAndReport() {
   if (ttsAudio) { ttsAudio.pause(); ttsAudio.currentTime = 0; ttsAudio.src = ''; ttsAudio = null; }
-  S.aiSpeaking    = false;
+  S.aiSpeaking     = false;
   S.interviewEnded = true;
   clearInterval(S.timerInterval);
   disableInput();
@@ -561,28 +551,21 @@ async function endAndReport() {
   showTyping();
 
   try {
-    await fetch(`${API}/api/interview/end`, {
+    // POST /end — graph runs generate_report node and marks session completed
+    const endRes = await fetch(`${API}/api/interview/end`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session_id: S.sessionId }),
     });
-
-    const rRes = await fetch(`${API}/api/interview/report/generate`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: S.sessionId }),
-    });
-    const rD = await rRes.json();
+    const endD = await endRes.json();
     hideTyping();
-    if (!rD.success) throw new Error(rD.error);
+    if (!endD.success) throw new Error(endD.error || 'Failed to end interview');
 
-    const cRes = await fetch(`${API}/api/interview/conversation/${S.sessionId}`);
-    const cD   = await cRes.json();
-
-    // saveState so report page has sessionId + scores, then navigate
+    // Report is now in DB — report page will fetch it via GET /report/:id
     saveState();
     window.location.href = '/report';
   } catch (err) {
     hideTyping();
-    addMsg('agent', 'Error generating report: ' + err.message);
+    addMsg('agent', 'Error ending interview: ' + err.message);
     enableInput();
   }
 }
