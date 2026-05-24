@@ -1,29 +1,3 @@
-# app/routers/interview.py
-"""
-Interview router — LangGraph edition.
-
-Flow
-────
-POST /session          Create session row (no graph yet)
-POST /start            Run graph: load_candidate → generate_question
-                       Persist AgentState to session.agent_state (JSON)
-POST /submit-answer    Resume graph from saved state:
-                         evaluate_answer → check_completion →
-                           generate_question   (if more questions)
-                         OR
-                           generate_report     (if complete)
-                       Persist updated AgentState back to DB
-POST /end              Early exit — runs generate_report node directly
-GET  /report/:id       Read existing Report row (no Groq call)
-GET  /conversation/:id Read Conversation rows
-
-Legacy endpoints kept for compatibility
-────────────────────────────────────────
-POST /answer           Thin wrapper — just saves answer text to DB
-POST /next-question    Returns next question from saved agent_state
-POST /report/generate  Alias for the graph-driven report generation
-"""
-
 import json as _json
 import uuid
 from datetime import datetime
@@ -35,58 +9,96 @@ from sqlalchemy import select
 from app.database import get_db
 from app.models import Candidate, InterviewSession, Conversation, Report
 from app.schemas import (
-    SessionCreateRequest, InterviewStartRequest,
-    AnswerSaveRequest, NextQuestionRequest,
-    EndInterviewRequest, ReportGenerateRequest,
+    SessionCreateRequest,
+    InterviewStartRequest,
+    AnswerSaveRequest,
+    NextQuestionRequest,
+    EndInterviewRequest,
+    ReportGenerateRequest,
 )
 from app.exceptions import (
-    CandidateNotFoundError, SessionNotFoundError,
-    InterviewAlreadyActiveError, InterviewNotActiveError,
+    CandidateNotFoundError,
+    SessionNotFoundError,
+    InterviewAlreadyActiveError,
+    InterviewNotActiveError,
 )
-from app.agents.graph import start_graph, answer_graph, report_graph
+
+# ONLY ONE GRAPH NOW
+from app.agents.graph import interview_graph
 
 
 router = APIRouter(prefix="/api/interview", tags=["Interview"])
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# ============================================================================
+# HELPERS
+# ============================================================================
+
 
 def _ensure_list(value) -> list:
-    """Coerce SQLite JSON column value to a Python list."""
+    """Coerce SQLite JSON column value to Python list."""
+
     if value is None:
         return []
+
     if isinstance(value, list):
         return value
+
     if isinstance(value, str):
         try:
             parsed = _json.loads(value)
             return parsed if isinstance(parsed, list) else []
         except (ValueError, TypeError):
             return []
+
     return []
 
 
+
 def _state_to_json(state: dict) -> dict:
-    """Strip non-serialisable keys (db session) before persisting to DB."""
-    return {k: v for k, v in state.items() if k != "db"}
+    """
+    Removes non-serializable objects before saving state.
+    """
+
+    return {
+        k: v
+        for k, v in state.items()
+        if k != "db"
+    }
+
 
 
 def _restore_state(saved: dict, db: AsyncSession) -> dict:
-    """Re-attach the live DB session to a restored AgentState."""
-    return {**saved, "db": db}
+    """
+    Re-attaches DB session to persisted state.
+    """
+
+    return {
+        **saved,
+        "db": db,
+    }
 
 
-# ── Session ───────────────────────────────────────────────────────────────────
+# ============================================================================
+# CREATE SESSION
+# ============================================================================
+
 
 @router.post("/session")
 async def create_session(
     data: SessionCreateRequest,
     db: AsyncSession = Depends(get_db),
 ):
+
     result = await db.execute(
-        select(Candidate).where(Candidate.candidate_id == data.candidate_id)
+        select(Candidate).where(
+            Candidate.candidate_id == data.candidate_id
+        )
     )
-    if not result.scalar_one_or_none():
+
+    candidate = result.scalar_one_or_none()
+
+    if not candidate:
         raise CandidateNotFoundError(data.candidate_id)
 
     active = await db.execute(
@@ -95,6 +107,7 @@ async def create_session(
             InterviewSession.status == "active",
         )
     )
+
     if active.scalar_one_or_none():
         raise InterviewAlreadyActiveError()
 
@@ -104,17 +117,21 @@ async def create_session(
         candidate_id=data.candidate_id,
         status="pending",
     )
+
     db.add(session)
     await db.commit()
 
     return {
-        "success":      True,
-        "session_id":   session.session_id,
+        "success": True,
+        "session_id": session.session_id,
         "interview_id": session.interview_id,
     }
 
 
-# ── Start ─────────────────────────────────────────────────────────────────────
+# ============================================================================
+# START INTERVIEW
+# ============================================================================
+
 
 @router.post("/start")
 async def start_interview(
@@ -122,78 +139,118 @@ async def start_interview(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Initialises AgentState and runs the graph through:
-      load_candidate → generate_question
-    The graph pauses after generate_question (it needs the candidate's
-    answer before it can evaluate). State is persisted to DB.
+    Starts interview.
+
+    Unified graph flow:
+
+        phase=start
+            ↓
+        load_candidate
+            ↓
+        generate_question
     """
+
     sess_result = await db.execute(
-        select(InterviewSession).where(InterviewSession.session_id == data.session_id)
+        select(InterviewSession).where(
+            InterviewSession.session_id == data.session_id
+        )
     )
+
     session = sess_result.scalar_one_or_none()
+
     if not session:
         raise SessionNotFoundError(data.session_id)
 
-    # Mark active
-    session.status     = "active"
+    session.status = "active"
     session.started_at = datetime.utcnow()
+
     await db.commit()
 
-    # ── Build initial AgentState ──────────────────────────────────────────────
+    # =====================================================================
+    # INITIAL AGENT STATE
+    # =====================================================================
+
     initial_state = {
-        "candidate_id":        session.candidate_id,
-        "session_id":          data.session_id,
-        "interview_id":        data.interview_id,
-        "candidate":           {},          # filled by load_candidate node
-        "conversation":        [],
-        "current_question":    "",
+        "phase": "start",
+
+        "candidate_id": session.candidate_id,
+        "session_id": data.session_id,
+        "interview_id": data.interview_id,
+
+        "candidate": {},
+        "conversation": [],
+
+        "current_question": "",
         "current_question_id": "",
-        "candidate_answer":    "",
-        "question_number":     0,
-        "max_questions":       7,
-        "difficulty":          "medium",
-        "scores":              [],
-        "is_complete":         False,
-        "report":              None,
-        "db":                  db,
+        "candidate_answer": "",
+
+        "question_number": 0,
+        "max_questions": 7,
+
+        "difficulty": "medium",
+        "scores": [],
+        "bloom_level": "understand",
+        "is_complete": False,
+        "report": None,
+        "error": None,
+
+        "db": db,
     }
 
-    # ── Run graph: load_candidate → generate_question ─────────────────────────
-    # We invoke only these two nodes by stopping before evaluate_answer.
-    # LangGraph runs the full graph up to END, but generate_question
-    # does NOT call evaluate_answer — the graph pauses waiting for the
-    # next invocation. We control resumption by storing state + re-invoking.
-    state = await start_graph.ainvoke(
+    # =====================================================================
+    # RUN GRAPH
+    # =====================================================================
+
+    state = await interview_graph.ainvoke(
         initial_state,
-        config={"run_name": f"start_{data.session_id}"},
+        config={
+            "run_name": f"start_{data.session_id}",
+        },
     )
 
-    # ── Persist state to DB (without db session object) ───────────────────────
+    # =====================================================================
+    # SAVE STATE
+    # =====================================================================
+
     session.agent_state = _state_to_json(state)
+
     await db.commit()
 
-    # ── Save greeting to DB ───────────────────────────────────────────────────
-    greeting = f"Welcome {state['candidate']['name']}! Let's begin your {state['candidate']['role']} interview."
-    db.add(Conversation(
-        conversation_id=f"CONV_{uuid.uuid4().hex[:8].upper()}",
-        session_id=data.session_id,
-        interview_id=data.interview_id,
-        speaker="agent",
-        message=greeting,
-        timestamp=datetime.utcnow(),
-    ))
+    # =====================================================================
+    # SAVE GREETING
+    # =====================================================================
+
+    greeting = (
+        f"Welcome {state['candidate']['name']}! "
+        f"Let's begin your {state['candidate']['role']} interview."
+    )
+
+    db.add(
+        Conversation(
+            conversation_id=f"CONV_{uuid.uuid4().hex[:8].upper()}",
+            session_id=data.session_id,
+            interview_id=data.interview_id,
+            speaker="agent",
+            message=greeting,
+            timestamp=datetime.utcnow(),
+        )
+    )
+
     await db.commit()
 
     return {
-        "success":          True,
+        "success": True,
         "greeting_message": greeting,
-        "question_id":      state["current_question_id"],
-        "question":         state["current_question"],
-        "question_number":  state["question_number"],
+        "question_id": state["current_question_id"],
+        "question": state["current_question"],
+        "question_number": state["question_number"],
     }
 
 
-# ── Submit Answer (graph-driven) ──────────────────────────────────────────────
+# ============================================================================
+# SUBMIT ANSWER
+# ============================================================================
+
 
 @router.post("/submit-answer")
 async def submit_answer(
@@ -201,80 +258,129 @@ async def submit_answer(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Single endpoint that drives one full graph turn:
-      evaluate_answer → check_completion → generate_question OR generate_report
+    Runs one interview turn.
 
-    Replaces the old separate calls to:
-      /answer + /reflection/evaluate + /next-question (or /end + /report/generate)
+    Unified graph flow:
+
+        phase=answer
+            ↓
+        evaluate_answer
+            ↓
+        check_completion
+            ↓
+        generate_question OR generate_report
     """
+
     sess_result = await db.execute(
-        select(InterviewSession).where(InterviewSession.session_id == data.session_id)
+        select(InterviewSession).where(
+            InterviewSession.session_id == data.session_id
+        )
     )
+
     session = sess_result.scalar_one_or_none()
+
     if not session:
         raise SessionNotFoundError(data.session_id)
+
     if session.status != "active":
         raise InterviewNotActiveError()
 
-    # ── Restore AgentState from DB ────────────────────────────────────────────
     saved = session.agent_state
+
     if not saved:
-        raise SessionNotFoundError(f"No agent state for session {data.session_id}")
+        raise SessionNotFoundError(
+            f"No agent state for session {data.session_id}"
+        )
+
+    # =====================================================================
+    # RESTORE STATE
+    # =====================================================================
 
     state = _restore_state(saved, db)
 
-    # ── Inject this turn's answer into state ──────────────────────────────────
-    state["candidate_answer"]    = data.answer_text
+    # IMPORTANT
+    # This drives graph routing.
+    state["phase"] = "answer"
+
+    state["candidate_answer"] = data.answer_text
     state["current_question_id"] = data.question_id
 
-    # ── Run graph: evaluate_answer → check_completion → next node ────────────
-    # The graph will:
-    #   1. evaluate_answer  — scores answer, saves to DB, adjusts difficulty
-    #   2. check_completion — sets is_complete flag
-    #   3a. generate_question — if not complete (saves question to DB)
-    #   3b. generate_report   — if complete (saves report to DB, marks session done)
-    state = await answer_graph.ainvoke(
+    # =====================================================================
+    # RUN GRAPH
+    # =====================================================================
+
+    state = await interview_graph.ainvoke(
         state,
-        config={"run_name": f"turn_{data.session_id}_{state['question_number']}"},
+        config={
+            "run_name": (
+                f"turn_{data.session_id}_"
+                f"{state['question_number']}"
+            ),
+        },
     )
 
-    # ── Persist updated state ─────────────────────────────────────────────────
+    # =====================================================================
+    # SAVE UPDATED STATE
+    # =====================================================================
+
     session.agent_state = _state_to_json(state)
+
     await db.commit()
 
-    # ── Build response ────────────────────────────────────────────────────────
-    # Extract the score for the answer just evaluated
-    # state["scores"] is a list; the last entry is this turn's score.
-    # state["conversation"] last entry has the question that was just answered.
+    # =====================================================================
+    # BUILD RESPONSE
+    # =====================================================================
+
     scores_list = state.get("scores", [])
-    conv_list   = state.get("conversation", [])
-    last_score    = scores_list[-1] if scores_list else None
-    last_question = conv_list[-1]["question"] if conv_list else data.answer_text
+    conv_list = state.get("conversation", [])
+
+    last_score = scores_list[-1] if scores_list else None
+
+    last_question = (
+        conv_list[-1]["question"]
+        if conv_list
+        else data.answer_text
+    )
+
+    # =====================================================================
+    # INTERVIEW COMPLETE
+    # =====================================================================
 
     if state["is_complete"]:
-        # Report was generated by the graph
-        report = state.get("report") or {}
+
+        session.status = "completed"
+        session.completed_at = datetime.utcnow()
+
+        await db.commit()
+
         return {
-            "success":      True,
-            "is_complete":  True,
-            "report":       report,
-            "last_score":   last_score,
+            "success": True,
+            "is_complete": True,
+            "report": state.get("report") or {},
+            "last_score": last_score,
             "last_question": last_question,
         }
 
+    # =====================================================================
+    # CONTINUE INTERVIEW
+    # =====================================================================
+
     return {
-        "success":         True,
-        "is_complete":     False,
-        "question_id":     state["current_question_id"],
-        "question":        state["current_question"],
+        "success": True,
+        "is_complete": False,
+        "question_id": state["current_question_id"],
+        "question": state["current_question"],
         "question_number": state["question_number"],
         "difficulty_level": state["difficulty"],
-        "last_score":      last_score,
-        "last_question":   last_question,
+        "last_score": last_score,
+        "last_question": last_question,
     }
 
 
-# ── End Interview (early exit) ────────────────────────────────────────────────
+# ============================================================================
+# END INTERVIEW EARLY
+# ============================================================================
+
 
 @router.post("/end")
 async def end_interview(
@@ -282,172 +388,158 @@ async def end_interview(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Ends interview early. Restores state, forces is_complete=True,
-    then runs generate_report node directly via the graph.
+    Ends interview early.
+
+    Unified graph flow:
+
+        phase=report
+            ↓
+        generate_report
     """
+
     sess_result = await db.execute(
-        select(InterviewSession).where(InterviewSession.session_id == data.session_id)
-    )
-    session = sess_result.scalar_one_or_none()
-    if not session:
-        raise SessionNotFoundError(data.session_id)
-
-    # Check if report already exists
-    # Check if report already exists
-    existing_report = await db.execute(
-        select(Report).where(Report.session_id == data.session_id)
-    )
-
-    existing_report = existing_report.scalars().first()
-
-    # Generate report only if needed
-    if not existing_report and session.agent_state:
-        state = _restore_state(session.agent_state, db)
-        state["is_complete"] = True
-        state["candidate_answer"] = ""
-
-        await report_graph.ainvoke(
-            state,
-            config={"run_name": f"end_{data.session_id}"},
+        select(InterviewSession).where(
+            InterviewSession.session_id == data.session_id
         )
-
-    # Always finalize session
-    session.status = "completed"
-    session.completed_at = datetime.utcnow()
-    session.agent_state = None
-
-    await db.commit()
-    return {"success": True, "message": "Interview ended successfully"}
-
-
-# ── Report (read from DB — no Groq call) ─────────────────────────────────────
-
-@router.post("/report/generate")
-async def generate_report_compat(
-    data: ReportGenerateRequest,
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Compatibility endpoint — reads the report already saved by the graph.
-    If not found (e.g. interview ended before graph ran), generates it now.
-    """
-    result = await db.execute(
-        select(Report).where(Report.session_id == data.session_id)
     )
-    report = result.scalars().first()
 
-    if report:
-        return {
-            "success":             True,
-            "report_id":           report.report_id,
-            "overall_score":       report.overall_score,
-            "technical_score":     report.technical_score,
-            "communication_score": report.communication_score,
-            "strengths":           _ensure_list(report.strengths),
-            "improvements":        _ensure_list(report.improvements),
-            "recommendation":      report.recommendation,
-        }
-
-    # Report not yet in DB — shouldn't normally happen, but handle gracefully
-    raise SessionNotFoundError(f"Report not found for session {data.session_id}")
-
-
-@router.get("/report/{session_id}")
-async def get_report(session_id: str, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(Report).where(Report.session_id == session_id)
-    )
-    report = result.scalars().first()
-    if not report:
-        raise SessionNotFoundError(session_id)
-
-    return {
-        "success":             True,
-        "overall_score":       report.overall_score,
-        "technical_score":     report.technical_score,
-        "communication_score": report.communication_score,
-        "strengths":           _ensure_list(report.strengths),
-        "improvements":        _ensure_list(report.improvements),
-        "recommendation":      report.recommendation,
-    }
-
-
-@router.get("/conversation/{session_id}")
-async def get_conversation(session_id: str, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(Conversation)
-        .where(Conversation.session_id == session_id)
-        .order_by(Conversation.timestamp)
-    )
-    messages = result.scalars().all()
-    return {
-        "success": True,
-        "conversation": [
-            {
-                "speaker":   m.speaker,
-                "message":   m.message,
-                "timestamp": str(m.timestamp),
-            }
-            for m in messages
-        ],
-    }
-
-
-# ── Legacy endpoints (kept for backward compat) ───────────────────────────────
-
-@router.post("/answer")
-async def save_answer_legacy(
-    data: AnswerSaveRequest,
-    db: AsyncSession = Depends(get_db),
-):
-    """Legacy — use /submit-answer instead. Saves answer to DB only."""
-    sess_result = await db.execute(
-        select(InterviewSession).where(InterviewSession.session_id == data.session_id)
-    )
     session = sess_result.scalar_one_or_none()
+
     if not session:
         raise SessionNotFoundError(data.session_id)
-    if session.status != "active":
-        raise InterviewNotActiveError()
 
-    db.add(Conversation(
-        conversation_id=f"CONV_{uuid.uuid4().hex[:8].upper()}",
-        session_id=data.session_id,
-        interview_id=session.interview_id,
-        speaker="candidate",
-        message=data.answer_text,
-        question_id=data.question_id,
-        timestamp=datetime.utcnow(),
-    ))
-    await db.commit()
-    return {"success": True, "message": "Answer stored"}
-
-
-@router.post("/next-question")
-async def next_question_legacy(
-    data: NextQuestionRequest,
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Legacy — use /submit-answer instead.
-    Reads current question from saved agent_state to stay in sync.
-    """
-    sess_result = await db.execute(
-        select(InterviewSession).where(InterviewSession.session_id == data.session_id)
-    )
-    session = sess_result.scalar_one_or_none()
-    if not session:
-        raise SessionNotFoundError(data.session_id)
     if session.status != "active":
         raise InterviewNotActiveError()
 
     saved = session.agent_state
+
     if not saved:
-        raise SessionNotFoundError(f"No agent state for {data.session_id}")
+        raise SessionNotFoundError(
+            f"No agent state for session {data.session_id}"
+        )
+
+    # =====================================================================
+    # RESTORE STATE
+    # =====================================================================
+
+    state = _restore_state(saved, db)
+
+    # IMPORTANT
+    # Route unified graph correctly.
+    state["phase"] = "report"
+
+    # Force interview completion
+    state["is_complete"] = True
+
+    # No pending answer
+    state["candidate_answer"] = ""
+
+    # =====================================================================
+    # RUN GRAPH
+    # =====================================================================
+
+    state = await interview_graph.ainvoke(
+        state,
+        config={
+            "run_name": f"end_{data.session_id}",
+        },
+    )
+
+    print("FINAL REPORT STATE:", state.get("report"))
+
+    # =====================================================================
+    # FINALIZE SESSION
+    # =====================================================================
+
+    session.status = "completed"
+    session.completed_at = datetime.utcnow()
+
+    # Keep state for debugging/history
+    session.agent_state = _state_to_json(state)
+
+    await db.commit()
+
+    # =====================================================================
+    # RESPONSE
+    # =====================================================================
 
     return {
-        "success":          True,
-        "question_id":      saved.get("current_question_id", ""),
-        "question":         saved.get("current_question", ""),
-        "difficulty_level": saved.get("difficulty", "medium"),
+        "success": True,
+        "message": "Interview ended successfully",
+        "report_generated": state.get("report") is not None,
+    }
+
+# ============================================================================
+# GET REPORT
+# ============================================================================
+
+
+@router.get("/report/{session_id}")
+async def get_report(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+
+    result = await db.execute(
+        select(Report).where(
+            Report.session_id == session_id
+        )
+    )
+
+    report = result.scalars().first()
+
+    if not report:
+        raise SessionNotFoundError(
+            f"Report not found for session {session_id}"
+        )
+
+    return {
+        "success": True,
+
+        "overall_score": report.overall_score,
+
+        "technical_score": report.technical_score,
+
+        "communication_score": report.communication_score,
+
+        "strengths": _ensure_list(report.strengths),
+
+        "improvements": _ensure_list(report.improvements),
+
+        "recommendation": report.recommendation,
+    }
+
+
+# ============================================================================
+# GET CONVERSATION
+# ============================================================================
+
+
+@router.get("/conversation/{session_id}")
+async def get_conversation(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+
+    result = await db.execute(
+        select(Conversation)
+        .where(
+            Conversation.session_id == session_id
+        )
+        .order_by(Conversation.timestamp)
+    )
+
+    messages = result.scalars().all()
+
+    return {
+        "success": True,
+
+        "conversation": [
+            {
+                "speaker": m.speaker,
+                "message": m.message,
+                "timestamp": str(m.timestamp),
+            }
+            for m in messages
+        ],
     }
