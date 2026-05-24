@@ -73,6 +73,10 @@ async def generate_interview_question(
     skillset: list,
     previous_qa: list,
     difficulty: str = "medium",
+
+    # NEW
+    bloom_level: str = "understand",
+    bloom_instruction: str = "",
 ) -> dict:
     """
     Returns:
@@ -109,6 +113,11 @@ async def generate_interview_question(
                     f"- No coding problems\n"
                     f"- No puzzles\n"
                     f"- Avoid repetition\n"
+                    f"Generate ONE {difficulty}-difficulty "
+                    f"technical interview question.\n\n"
+
+                    f"Bloom's Taxonomy Level: {bloom_level}\n"
+                    f"{bloom_instruction}\n\n"
                     f"- Use Bloom's Taxonomy to adapt difficulty\n"
                     f"- Adjust complexity based on experience\n\n"
 
