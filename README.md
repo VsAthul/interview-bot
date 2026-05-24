@@ -160,6 +160,7 @@ Then open `http://localhost:8000` in your browser.
 
 
 
+---
 
 ### Screenshots
 
@@ -174,3 +175,5 @@ Then open `http://localhost:8000` in your browser.
 ## Interview report
 
 ![Final report](images/interview_report.png)
+
+---
