@@ -21,7 +21,7 @@ Candidate registers → Session created → Interview starts
 
 ## LangGraph agent graph
 
-> > ![langgraph graph image](graph_image.png)
+![langgraph graph image](graph_image.png)
 
 
 ## Agent nodes
@@ -166,12 +166,12 @@ Then open `http://localhost:8000` in your browser.
 
 #### Registration
 
-> ![Candidate registration page ](images/registration_page.png)
+![Candidate registration page ](images/registration_page.png)
 
 #### Live interview
 
-> ![Interview page ](images/interview_page.png)
+![Interview page ](images/interview_page.png)
 
 #### Interview report
 
-> ![Final report](images/interview_report.png)
+![Final report](images/interview_report.png)
