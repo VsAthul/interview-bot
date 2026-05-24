@@ -1,11 +1,18 @@
 # app/agents/state.py
-from typing import TypedDict, List, Optional, Any
+from typing import TypedDict, List, Optional, Any, Literal
 
 class AgentState(TypedDict):
     candidate_id:        str
     session_id:          str
     interview_id:        str
 
+    phase: Literal[
+        "start",
+        "answer",
+        "report"
+    ]
+
+    bloom_level: str
     # Loaded from DB
     candidate:           dict        # {name, role, experience, skillset}
 
