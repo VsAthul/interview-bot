@@ -160,18 +160,17 @@ Then open `http://localhost:8000` in your browser.
 
 
 
----
 
 ### Screenshots
 
-#### Registration
+## Registration
 
 ![Candidate registration page ](images/registration_page.png)
 
-#### Live interview
+## Live interview
 
 ![Interview page ](images/interview_page.png)
 
-#### Interview report
+## Interview report
 
 ![Final report](images/interview_report.png)
