@@ -158,7 +158,7 @@ Then open `http://localhost:8000` in your browser.
 
 ### Sequence diagram
 ---
-![sequence diagram](images/sequence_diagram.png)
+![sequence diagram](images/sequence_final.drawio.png)
 
 ---
 
