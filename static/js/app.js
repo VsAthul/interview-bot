@@ -1,11 +1,6 @@
-/* ═══════════════════════════════════════════════
-   NEXUSHIRE — SHARED JAVASCRIPT
-   app.js
-═══════════════════════════════════════════════ */
 
 const API = 'http://localhost:8000';
 
-/* ─── Shared State ───────────────────────────────────────────── */
 const S = {
   candidateId:    null,
   sessionId:      null,
@@ -31,7 +26,6 @@ const S = {
   aiSpeaking:     false,
 };
 
-/* ─── Persist state across pages via sessionStorage ─────────── */
 function saveState() {
   const persist = {
     candidateId: S.candidateId, sessionId: S.sessionId,
@@ -60,7 +54,6 @@ function loadState() {
   } catch { /* ignore */ }
 }
 
-/* ─── Utility ────────────────────────────────────────────────── */
 function esc(s) {
   return String(s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -84,9 +77,6 @@ function goTo(page) {
   window.location.href = page;
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   INDEX.HTML — REGISTRATION
-═══════════════════════════════════════════════════════════════ */
 
 /* ── Tag / Skill Input ── */
 function initTagInput() {
@@ -227,10 +217,6 @@ async function handleStart() {
   }
 }
 
-
-/* ═══════════════════════════════════════════════════════════════
-   INTERVIEW.HTML — LIVE INTERVIEW
-═══════════════════════════════════════════════════════════════ */
 
 let ttsAudio = null;
 

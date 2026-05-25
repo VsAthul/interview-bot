@@ -1,7 +1,4 @@
-/* ═══════════════════════════════════════════════
-   NEXUSHIRE — LIGHT THEME STYLESHEET
-   style.css
-═══════════════════════════════════════════════ */
+
 
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&family=Fraunces:wght@700;800&display=swap');
 
@@ -64,9 +61,6 @@ body {
 }
 
 
-/* ═══════════════════════════════════════════════
-   SHARED COMPONENTS
-═══════════════════════════════════════════════ */
 
 /* Logo */
 .logo-bar {
@@ -212,9 +206,6 @@ select option { background: #fff; color: var(--ink); }
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
 
 
-/* ═══════════════════════════════════════════════
-   REGISTRATION PAGE
-═══════════════════════════════════════════════ */
 #pg-register {
   display: flex; flex-direction: row; align-items: stretch;
 }
@@ -331,9 +322,6 @@ select option { background: #fff; color: var(--ink); }
 .popup-btns { display: flex; gap: .65rem; }
 
 
-/* ═══════════════════════════════════════════════
-   INTERVIEW PAGE
-═══════════════════════════════════════════════ */
 
 .iv-nav {
   display: flex; align-items: center; justify-content: space-between;
@@ -564,9 +552,6 @@ select option { background: #fff; color: var(--ink); }
 .mic-status.processing { color: var(--accent); }
 
 
-/* ═══════════════════════════════════════════════
-   REPORT PAGE
-═══════════════════════════════════════════════ */
 #pg-report {
   display: flex; flex-direction: column;
   align-items: center; padding: 2rem; overflow-y: auto;
@@ -684,9 +669,6 @@ select option { background: #fff; color: var(--ink); }
 .report-actions { display: flex; gap: .9rem; margin-top: 1.4rem; }
 
 
-/* ═══════════════════════════════════════════════
-   RESPONSIVE
-═══════════════════════════════════════════════ */
 @media (max-width: 900px) {
   #pg-register { flex-direction: column; }
   .reg-left { width: 100%; min-height: auto; padding: 2rem; }

@@ -166,9 +166,6 @@ async def start_interview(
 
     await db.commit()
 
-    # =====================================================================
-    # INITIAL AGENT STATE
-    # =====================================================================
 
     initial_state = {
         "phase": "start",
@@ -197,9 +194,6 @@ async def start_interview(
         "db": db,
     }
 
-    # =====================================================================
-    # RUN GRAPH
-    # =====================================================================
 
     state = await interview_graph.ainvoke(
         initial_state,
@@ -208,17 +202,11 @@ async def start_interview(
         },
     )
 
-    # =====================================================================
-    # SAVE STATE
-    # =====================================================================
 
     session.agent_state = _state_to_json(state)
 
     await db.commit()
 
-    # =====================================================================
-    # SAVE GREETING
-    # =====================================================================
 
     greeting = (
         f"Welcome {state['candidate']['name']}! "
@@ -247,9 +235,6 @@ async def start_interview(
     }
 
 
-# ============================================================================
-# SUBMIT ANSWER
-# ============================================================================
 
 
 @router.post("/submit-answer")
@@ -292,9 +277,6 @@ async def submit_answer(
             f"No agent state for session {data.session_id}"
         )
 
-    # =====================================================================
-    # RESTORE STATE
-    # =====================================================================
 
     state = _restore_state(saved, db)
 
@@ -305,9 +287,6 @@ async def submit_answer(
     state["candidate_answer"] = data.answer_text
     state["current_question_id"] = data.question_id
 
-    # =====================================================================
-    # RUN GRAPH
-    # =====================================================================
 
     state = await interview_graph.ainvoke(
         state,
@@ -319,17 +298,11 @@ async def submit_answer(
         },
     )
 
-    # =====================================================================
-    # SAVE UPDATED STATE
-    # =====================================================================
 
     session.agent_state = _state_to_json(state)
 
     await db.commit()
 
-    # =====================================================================
-    # BUILD RESPONSE
-    # =====================================================================
 
     scores_list = state.get("scores", [])
     conv_list = state.get("conversation", [])
@@ -342,9 +315,6 @@ async def submit_answer(
         else data.answer_text
     )
 
-    # =====================================================================
-    # INTERVIEW COMPLETE
-    # =====================================================================
 
     if state["is_complete"]:
 
@@ -361,9 +331,6 @@ async def submit_answer(
             "last_question": last_question,
         }
 
-    # =====================================================================
-    # CONTINUE INTERVIEW
-    # =====================================================================
 
     return {
         "success": True,
@@ -376,10 +343,6 @@ async def submit_answer(
         "last_question": last_question,
     }
 
-
-# ============================================================================
-# END INTERVIEW EARLY
-# ============================================================================
 
 
 @router.post("/end")
@@ -418,9 +381,6 @@ async def end_interview(
             f"No agent state for session {data.session_id}"
         )
 
-    # =====================================================================
-    # RESTORE STATE
-    # =====================================================================
 
     state = _restore_state(saved, db)
 
@@ -434,9 +394,6 @@ async def end_interview(
     # No pending answer
     state["candidate_answer"] = ""
 
-    # =====================================================================
-    # RUN GRAPH
-    # =====================================================================
 
     state = await interview_graph.ainvoke(
         state,
@@ -447,9 +404,6 @@ async def end_interview(
 
     print("FINAL REPORT STATE:", state.get("report"))
 
-    # =====================================================================
-    # FINALIZE SESSION
-    # =====================================================================
 
     session.status = "completed"
     session.completed_at = datetime.utcnow()
@@ -459,9 +413,6 @@ async def end_interview(
 
     await db.commit()
 
-    # =====================================================================
-    # RESPONSE
-    # =====================================================================
 
     return {
         "success": True,
@@ -469,9 +420,6 @@ async def end_interview(
         "report_generated": state.get("report") is not None,
     }
 
-# ============================================================================
-# GET REPORT
-# ============================================================================
 
 
 @router.get("/report/{session_id}")
@@ -509,10 +457,6 @@ async def get_report(
         "recommendation": report.recommendation,
     }
 
-
-# ============================================================================
-# GET CONVERSATION
-# ============================================================================
 
 
 @router.get("/conversation/{session_id}")
