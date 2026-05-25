@@ -9,9 +9,6 @@ from app.config import settings
 from app.exceptions import GroqAPIError
 
 
-# ============================================================================
-# LLM FACTORY
-# ============================================================================
 
 def _llm() -> ChatGroq:
     return ChatGroq(
@@ -21,9 +18,6 @@ def _llm() -> ChatGroq:
     )
 
 
-# ============================================================================
-# SAFE JSON PARSER
-# ============================================================================
 
 def _parse_json(raw: str) -> dict:
     """
@@ -63,9 +57,6 @@ def _parse_json(raw: str) -> dict:
         )
 
 
-# ============================================================================
-# QUESTION GENERATION
-# ============================================================================
 
 async def generate_interview_question(
     role: str,
@@ -169,9 +160,6 @@ async def generate_interview_question(
         raise GroqAPIError(str(e))
 
 
-# ============================================================================
-# ANSWER EVALUATION
-# ============================================================================
 
 async def evaluate_answer(
     question: str,
@@ -253,9 +241,6 @@ async def evaluate_answer(
         raise GroqAPIError(str(e))
 
 
-# ============================================================================
-# FINAL REPORT GENERATION
-# ============================================================================
 
 async def generate_final_report(
     candidate: dict,
@@ -342,9 +327,6 @@ async def generate_final_report(
 
         parsed = _parse_json(response.content)
 
-        # ================================================================
-        # SAFE SCHEMA ENFORCEMENT
-        # ================================================================
 
         report = {
 

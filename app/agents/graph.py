@@ -11,9 +11,6 @@ from app.agents.nodes.check_completion import check_completion
 from app.agents.nodes.generate_report import generate_report
 
 
-# =====================================================
-# ENTRY ROUTER
-# =====================================================
 
 
 def route_phase(state: AgentState) -> str:
@@ -39,9 +36,6 @@ def route_phase(state: AgentState) -> str:
     raise ValueError(f"Invalid phase: {phase}")
 
 
-# =====================================================
-# POST COMPLETION ROUTER
-# =====================================================
 
 
 def route_after_completion(state: AgentState) -> str:
@@ -59,17 +53,11 @@ def route_after_completion(state: AgentState) -> str:
     )
 
 
-# =====================================================
-# BUILD GRAPH
-# =====================================================
 
 
 def build_interview_graph():
     g = StateGraph(AgentState)
 
-    # =================================================
-    # NODES
-    # =================================================
 
     g.add_node("load_candidate", load_candidate)
     g.add_node("generate_question", generate_question)
@@ -77,9 +65,6 @@ def build_interview_graph():
     g.add_node("check_completion", check_completion)
     g.add_node("generate_report", generate_report)
 
-    # =================================================
-    # ENTRY ROUTING
-    # =================================================
 
     g.set_conditional_entry_point(
         route_phase,
@@ -90,16 +75,11 @@ def build_interview_graph():
         },
     )
 
-    # =================================================
-    # START FLOW
-    # =================================================
 
     g.add_edge("load_candidate", "generate_question")
     g.add_edge("generate_question", END)
 
-    # =================================================
-    # ANSWER FLOW
-    # =================================================
+   
 
     g.add_edge("evaluate_answer", "check_completion")
 
@@ -112,9 +92,6 @@ def build_interview_graph():
         },
     )
 
-    # =================================================
-    # TERMINAL STATES
-    # =================================================
 
     g.add_edge("generate_report", END)
 

@@ -34,7 +34,7 @@ class AudioDecodeError(Exception):
     pass
 
 
-# ── Register all handlers on the FastAPI app ─────────────────────────────────
+# Register all handlers on the FastAPI app 
 
 def register_exception_handlers(app: FastAPI):
 
