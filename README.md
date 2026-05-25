@@ -157,8 +157,7 @@ Then open `http://localhost:8000` in your browser.
 ## Visuals
 
 ### Sequence diagram
-
-
+![](images/sequence_diagram.png)
 
 ---
 
