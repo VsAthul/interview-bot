@@ -135,7 +135,7 @@ async def generate_interview_question(
             ),
         ]
 
-        response = _llm().invoke(messages)
+        response = await _llm().ainvoke(messages)
 
         parsed = _parse_json(response.content)
 
@@ -219,7 +219,7 @@ async def evaluate_answer(
             ),
         ]
 
-        response = _llm().invoke(messages)
+        response = await _llm().ainvoke(messages)
 
         parsed = _parse_json(response.content)
 
@@ -323,7 +323,7 @@ async def generate_final_report(
             ),
         ]
 
-        response = _llm().invoke(messages)
+        response = await _llm().ainvoke(messages)
 
         parsed = _parse_json(response.content)
 
