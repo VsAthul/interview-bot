@@ -25,6 +25,7 @@ from app.exceptions import (
 
 # ONLY ONE GRAPH NOW
 from app.agents.graph import interview_graph
+from config import max_questions
 
 
 router = APIRouter(prefix="/api/interview", tags=["Interview"])
@@ -182,7 +183,7 @@ async def start_interview(
         "candidate_answer": "",
 
         "question_number": 0,
-        "max_questions": 7,
+        "max_questions": max_questions,
 
         "difficulty": "medium",
         "scores": [],
