@@ -214,16 +214,16 @@ async def start_interview(
         f"Let's begin your {state['candidate']['role']} interview."
     )
 
-    db.add(
-        Conversation(
-            conversation_id=f"CONV_{uuid.uuid4().hex[:8].upper()}",
-            session_id=data.session_id,
-            interview_id=data.interview_id,
-            speaker="agent",
-            message=greeting,
-            timestamp=datetime.utcnow(),
-        )
-    )
+    # db.add(
+    #     Conversation(
+    #         conversation_id=f"CONV_{uuid.uuid4().hex[:8].upper()}",
+    #         session_id=data.session_id,
+    #         interview_id=data.interview_id,
+    #         speaker="agent",
+    #         message=greeting,
+    #         timestamp=datetime.utcnow(),
+    #     )
+    # )
 
     await db.commit()
 
@@ -310,11 +310,12 @@ async def submit_answer(
 
     last_score = scores_list[-1] if scores_list else None
 
-    last_question = (
-        conv_list[-1]["question"]
-        if conv_list
-        else data.answer_text
-    )
+    last_question = ""
+
+    if conv_list:
+        last_question = conv_list[-1].get("question", "")
+    else:
+        last_question = state.get("current_question", "")
 
 
     if state["is_complete"]:
