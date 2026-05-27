@@ -14,7 +14,7 @@ from app.models import (
 from app.services.groq_service import generate_final_report
 
 
-def _ensure_list(value) -> list:
+def _ensure_list(value : str | list | None) -> list:
     if value is None:
         return []
 

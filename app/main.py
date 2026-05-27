@@ -1,5 +1,6 @@
 import os
 from contextlib import asynccontextmanager
+from typing import AsyncGenerator
 
 from fastapi import FastAPI, Request
 from fastapi.templating import Jinja2Templates
@@ -16,7 +17,7 @@ os.makedirs("audio", exist_ok=True)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI)-> AsyncGenerator[None, None]:
     await init_db()
     print("Database ready")
     yield
@@ -45,7 +46,7 @@ templates = Jinja2Templates(directory="templates")
 
 
 @app.get("/", response_class=HTMLResponse)
-async def ui(request: Request):
+async def ui(request: Request)->HTMLResponse:
     return templates.TemplateResponse(
         request=request,
         name="index.html",
@@ -53,7 +54,7 @@ async def ui(request: Request):
 
 
 @app.get("/interview", response_class=HTMLResponse)
-async def interview_ui(request: Request):
+async def interview_ui(request: Request)->HTMLResponse:
     return templates.TemplateResponse(
         request=request,
         name="interview.html",
@@ -61,7 +62,7 @@ async def interview_ui(request: Request):
 
 
 @app.get("/report", response_class=HTMLResponse)
-async def report_ui(request: Request):
+async def report_ui(request: Request)->HTMLResponse:
     return templates.TemplateResponse(
         request=request,
         name="interview_report.html",

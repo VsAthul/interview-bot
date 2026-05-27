@@ -8,6 +8,6 @@ router = APIRouter(prefix="/api/stt", tags=["STT"])
 
 
 @router.post("/transcribe")
-async def transcribe(data: STTRequest, db: AsyncSession = Depends(get_db)):
+async def transcribe(data: STTRequest, db: AsyncSession = Depends(get_db))->dict:
     result = await transcribe_audio(data.audio_file)
     return {"success": True, **result}

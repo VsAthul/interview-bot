@@ -36,7 +36,7 @@ class AudioDecodeError(Exception):
 
 # Register all handlers on the FastAPI app 
 
-def register_exception_handlers(app: FastAPI):
+def register_exception_handlers(app: FastAPI)->None:
 
     @app.exception_handler(CandidateNotFoundError)
     async def _(req: Request, exc: CandidateNotFoundError):

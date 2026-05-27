@@ -6,7 +6,7 @@ from app.agents.state import AgentState
 from app.exceptions import CandidateNotFoundError
 
 
-def _ensure_list(value) -> list:
+def _ensure_list(value : str | list | None) -> list:
     """Coerce SQLite JSON column back to a Python list."""
     if value is None:
         return []

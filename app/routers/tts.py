@@ -6,6 +6,6 @@ router = APIRouter(prefix="/api/tts", tags=["TTS"])
 
 
 @router.post("/generate")
-async def generate_tts(data: TTSRequest):
+async def generate_tts(data: TTSRequest)->dict:
     audio_url = await text_to_speech(data.text, data.voice_type, data.speed)
     return {"success": True, "audio_url": audio_url}
