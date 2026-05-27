@@ -4,7 +4,7 @@ from sqlalchemy import select
 from app.database import get_db
 from app.models import InterviewSession, Candidate
 from app.schemas import ReflectionRequest
-from app.exceptions import SessionNotFoundError
+from app.exceptions import CandidateNotFoundError, SessionNotFoundError
 from app.services.groq_service import evaluate_answer
 
 router = APIRouter(prefix="/api/reflection", tags=["Reflection"])
@@ -23,6 +23,8 @@ async def reflect(data: ReflectionRequest, db: AsyncSession = Depends(get_db)):
         select(Candidate).where(Candidate.candidate_id == session.candidate_id)
     )
     candidate = cand_result.scalar_one_or_none()
+    if not candidate:
+        raise CandidateNotFoundError(session.candidate_id)
 
     result = await evaluate_answer(
         question=data.question,
