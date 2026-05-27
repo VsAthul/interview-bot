@@ -317,7 +317,6 @@ async def submit_answer(
     else:
         last_question = state.get("current_question", "")
 
-
     if state["is_complete"]:
 
         session.status = "completed"
