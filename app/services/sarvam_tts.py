@@ -59,5 +59,11 @@ async def text_to_speech(
 
             return f"/audio/{filename}"
 
+    except SarvamAPIError:
+        raise
+    except httpx.HTTPStatusError as e:
+        raise SarvamAPIError(f"HTTP error: {e.response.status_code}: {e.response.text}") from e
+    except httpx.RequestError as e:
+        raise SarvamAPIError(f"Request failed: {str(e)}") from e
     except Exception as e:
-        raise SarvamAPIError(str(e))
+        raise SarvamAPIError(f"Unexpected error: {str(e)}") from e
