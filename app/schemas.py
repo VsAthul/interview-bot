@@ -12,30 +12,11 @@ class CandidateRegisterRequest(BaseModel):
     skillset:   List[str]
 
 
-
-class SessionCreateRequest(BaseModel):
-    candidate_id: str
-
-class InterviewStartRequest(BaseModel):
-    session_id:   str
-    interview_id: str
-
-class AnswerSaveRequest(BaseModel):
+class InterviewRequest(BaseModel):
     session_id:  str
-    question_id: str
-    answer_text: str
-
-class NextQuestionRequest(BaseModel):
-    session_id:        str
-    previous_question: str
-    candidate_answer:  str
-
-class EndInterviewRequest(BaseModel):
-    session_id: str
-
-class ReportGenerateRequest(BaseModel):
-    session_id: str
-
+    answer:      Optional[str] = None
+    question_id: Optional[str] = None
+    end:         bool = False
 
 
 class STTRequest(BaseModel):
