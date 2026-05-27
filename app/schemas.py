@@ -19,12 +19,6 @@ class InterviewRequest(BaseModel):
     end:         bool = False
 
 
-class STTRequest(BaseModel):
-    session_id:   str
-    interview_id: str
-    question_id:  str
-    audio_file:   str   # base64-encoded WAV/MP3
-
 class TTSRequest(BaseModel):
     text:       str
     voice_type: str   = "female_en"
