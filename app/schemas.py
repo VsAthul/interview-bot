@@ -23,10 +23,3 @@ class TTSRequest(BaseModel):
     text:       str
     voice_type: str   = "female_en"
     speed:      float = 1.0
-
-
-
-class ReflectionRequest(BaseModel):
-    session_id:       str
-    question:         str
-    candidate_answer: str
