@@ -75,9 +75,7 @@ async def evaluate_answer_node(state: AgentState) -> AgentState:
 
     feedback = ""
 
-    # =====================================================================
     # EVALUATE ANSWER USING LLM
-    # =====================================================================
 
     try:
 
@@ -87,9 +85,7 @@ async def evaluate_answer_node(state: AgentState) -> AgentState:
             role=state["candidate"]["role"],
         )
 
-        # ================================================================
         # SCORE
-        # ================================================================
 
         try:
             score = float(result.get("score", 50))
@@ -101,9 +97,7 @@ async def evaluate_answer_node(state: AgentState) -> AgentState:
             "",
         )
 
-        # ================================================================
         # ADAPTIVE DIFFICULTY
-        # ================================================================
 
         decision = result.get(
             "decision",
@@ -129,36 +123,31 @@ async def evaluate_answer_node(state: AgentState) -> AgentState:
         else:
             new_difficulty = current
 
-        # ================================================================
         # BLOOM TAXONOMY ADAPTATION
-        # ================================================================
 
-        idx = BLOOM_ORDER.index(current_bloom)
-
-        # Strong candidate → move cognitively upward
-        if score >= 85 and idx < len(BLOOM_ORDER) - 1:
-
-            new_bloom = BLOOM_ORDER[idx + 1]
-
-        # Weak candidate → move cognitively downward
-        elif score < 50 and idx > 0:
-
-            new_bloom = BLOOM_ORDER[idx - 1]
-
+        if current_bloom not in BLOOM_ORDER:
+            new_bloom = current_bloom  # preserve unknown value, skip adaptation
         else:
-            new_bloom = current_bloom
+            idx = BLOOM_ORDER.index(current_bloom)
+
+            if score >= 85 and idx < len(BLOOM_ORDER) - 1:
+                new_bloom = BLOOM_ORDER[idx + 1]
+            elif score < 50 and idx > 0:
+                new_bloom = BLOOM_ORDER[idx - 1]
+            else:
+                new_bloom = current_bloom
 
     except Exception as e:
 
-        # ================================================================
-        # SAFE FALLBACK
-        # ================================================================
+        # SAFE FAILURE HANDLING
 
-        state["error"] = str(e)
+        state["error"] = f"Answer evaluation failed: {str(e)}"
 
-    # =====================================================================
+        # DO NOT mutate interview progression on failed evaluation
+        return state
+
+
     # UPDATE MEMORY STATE
-    # =====================================================================
 
     updated_conversation = state["conversation"] + [
         {
