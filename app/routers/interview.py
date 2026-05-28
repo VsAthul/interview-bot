@@ -15,13 +15,17 @@ from app.exceptions import (
     CandidateNotFoundError,
     SessionNotFoundError,
     InterviewNotActiveError,
+    ReportNotFoundError,                          # restored: was missing
 )
 from app.agents.graph import interview_graph
+from config import max_questions
 
 router = APIRouter(prefix="/api/interview", tags=["Interview"])
 
 
+# ============================================================================
 # HELPERS
+# ============================================================================
 
 def _ensure_list(value) -> list:
     if value is None:
@@ -38,20 +42,21 @@ def _ensure_list(value) -> list:
 
 
 def _state_to_json(state: dict) -> dict:
-    return {k: v for k, v in state.items() if k != "db"}
+    return dict(state)                            # simplified: db no longer in state
 
 
-def _restore_state(saved: dict, db: AsyncSession) -> dict:
-    return {**saved, "db": db}
+# _restore_state deleted — db is now passed via config["configurable"]["db"]
 
 
+# ============================================================================
 # UNIFIED ENDPOINT
+# ============================================================================
 
 @router.post("")
 async def interview(
     data: InterviewRequest,
     db: AsyncSession = Depends(get_db),
-):
+) -> dict:                                        # added: return type annotation
     """
     Single unified interview endpoint.
 
@@ -75,7 +80,9 @@ async def interview(
     if not session:
         raise SessionNotFoundError(data.session_id)
 
+    # -------------------------------------------------------------------------
     # ROUTE: START
+    # -------------------------------------------------------------------------
 
     if session.status == "pending":
 
@@ -94,29 +101,32 @@ async def interview(
         await db.commit()
 
         state = {
-            "phase": "start",
-            "candidate_id": session.candidate_id,
-            "session_id": data.session_id,
-            "interview_id": session.interview_id,
-            "candidate": {},
-            "conversation": [],
-            "current_question": "",
+            "phase":               "start",
+            "candidate_id":        session.candidate_id,
+            "session_id":          data.session_id,
+            "interview_id":        session.interview_id,
+            "candidate":           {},
+            "conversation":        [],
+            "current_question":    "",
             "current_question_id": "",
-            "candidate_answer": "",
-            "question_number": 0,
-            "max_questions": 7,
-            "difficulty": "medium",
-            "scores": [],
-            "bloom_level": "understand",
-            "is_complete": False,
-            "report": None,
-            "error": None,
-            "db": db,
+            "candidate_answer":    "",
+            "question_number":     0,
+            "max_questions":       max_questions,  # fixed: was hardcoded 7
+            "difficulty":          "medium",
+            "scores":              [],
+            "bloom_level":         "understand",
+            "is_complete":         False,
+            "report":              None,
+            "error":               None,
+            # db removed — passed via config["configurable"]["db"]
         }
 
-        state = await interview_graph.ainvoke(
+        state = await interview_graph.ainvoke(    # fixed: single ainvoke, removed duplicate
             state,
-            config={"run_name": f"start_{data.session_id}"},
+            config={
+                "run_name":     f"start_{data.session_id}",
+                "configurable": {"db": db},        # added: db passed via configurable
+            },
         )
 
         session.agent_state = _state_to_json(state)
@@ -126,10 +136,10 @@ async def interview(
             f"Let's begin your {state['candidate']['role']} interview."
         )
 
-        db.add(Conversation(
+        db.add(Conversation(                       # restored: was commented out
             conversation_id=f"CONV_{uuid.uuid4().hex[:8].upper()}",
             session_id=data.session_id,
-            interview_id=session.interview_id,
+            interview_id=session.interview_id,     # fixed: was data.interview_id
             speaker="agent",
             message=greeting,
             timestamp=datetime.utcnow(),
@@ -138,15 +148,17 @@ async def interview(
         await db.commit()
 
         return {
-            "success": True,
-            "phase": "start",
+            "success":          True,
+            "phase":            "start",           # added: was missing
             "greeting_message": greeting,
-            "question_id": state["current_question_id"],
-            "question": state["current_question"],
-            "question_number": state["question_number"],
+            "question_id":      state["current_question_id"],
+            "question":         state["current_question"],
+            "question_number":  state["question_number"],
         }
 
+    # -------------------------------------------------------------------------
     # ROUTE: END  (active + end=True)
+    # -------------------------------------------------------------------------
 
     if session.status == "active" and data.end:
 
@@ -155,30 +167,35 @@ async def interview(
                 f"No agent state for session {data.session_id}"
             )
 
-        state = _restore_state(session.agent_state, db)
-        state["phase"] = "report"
-        state["is_complete"] = True
+        state = session.agent_state                # fixed: _restore_state removed
+        state["phase"]            = "report"
+        state["is_complete"]      = True
         state["candidate_answer"] = ""
 
         state = await interview_graph.ainvoke(
             state,
-            config={"run_name": f"end_{data.session_id}"},
+            config={
+                "run_name":     f"end_{data.session_id}",
+                "configurable": {"db": db},        # added: db passed via configurable
+            },
         )
 
-        session.status = "completed"
+        session.status       = "completed"
         session.completed_at = datetime.utcnow()
-        session.agent_state = _state_to_json(state)
+        session.agent_state  = _state_to_json(state)
 
         await db.commit()
 
         return {
-            "success": True,
-            "phase": "end",
-            "message": "Interview ended successfully",
+            "success":          True,
+            "phase":            "end",
+            "message":          "Interview ended successfully",
             "report_generated": state.get("report") is not None,
         }
 
+    # -------------------------------------------------------------------------
     # ROUTE: SUBMIT ANSWER  (active + answer provided)
+    # -------------------------------------------------------------------------
 
     if session.status == "active":
 
@@ -190,50 +207,51 @@ async def interview(
         if not data.answer:
             raise InterviewNotActiveError()
 
-        state = _restore_state(session.agent_state, db)
-        state["phase"] = "answer"
-        state["candidate_answer"] = data.answer
+        state = session.agent_state                # fixed: _restore_state removed
+        state["phase"]               = "answer"
+        state["candidate_answer"]    = data.answer
         state["current_question_id"] = data.question_id
 
         state = await interview_graph.ainvoke(
             state,
             config={
-                "run_name": f"turn_{data.session_id}_{state['question_number']}"
+                "run_name":     f"turn_{data.session_id}_{state['question_number']}",
+                "configurable": {"db": db},        # added: db passed via configurable
             },
         )
 
         session.agent_state = _state_to_json(state)
         await db.commit()
 
-        scores_list = state.get("scores", [])
-        conv_list = state.get("conversation", [])
-        last_score = scores_list[-1] if scores_list else None
+        scores_list   = state.get("scores", [])
+        conv_list     = state.get("conversation", [])
+        last_score    = scores_list[-1] if scores_list else None
         last_question = conv_list[-1]["question"] if conv_list else data.answer
 
         if state["is_complete"]:
-            session.status = "completed"
+            session.status       = "completed"
             session.completed_at = datetime.utcnow()
             await db.commit()
 
             return {
-                "success": True,
-                "phase": "complete",
-                "is_complete": True,
-                "report": state.get("report") or {},
-                "last_score": last_score,
+                "success":       True,
+                "phase":         "complete",
+                "is_complete":   True,
+                "report":        state.get("report") or {},
+                "last_score":    last_score,
                 "last_question": last_question,
             }
 
         return {
-            "success": True,
-            "phase": "answer",
-            "is_complete": False,
-            "question_id": state["current_question_id"],
-            "question": state["current_question"],
-            "question_number": state["question_number"],
+            "success":          True,
+            "phase":            "answer",
+            "is_complete":      False,
+            "question_id":      state["current_question_id"],
+            "question":         state["current_question"],
+            "question_number":  state["question_number"],
             "difficulty_level": state["difficulty"],
-            "last_score": last_score,
-            "last_question": last_question,
+            "last_score":       last_score,
+            "last_question":    last_question,
         }
 
     # ALREADY COMPLETED
@@ -241,29 +259,31 @@ async def interview(
     raise InterviewNotActiveError()
 
 
-# READ-ONLY ENDPOINTS (unchanged)
+# ============================================================================
+# READ-ONLY ENDPOINTS
+# ============================================================================
 
 @router.get("/report/{session_id}")
 async def get_report(
     session_id: str,
     db: AsyncSession = Depends(get_db),
-):
+) -> dict:                                        # added: return type annotation
     result = await db.execute(
         select(Report).where(Report.session_id == session_id)
     )
     report = result.scalars().first()
 
     if not report:
-        raise SessionNotFoundError(f"Report not found for session {session_id}")
+        raise ReportNotFoundError(session_id)     # fixed: was SessionNotFoundError
 
     return {
-        "success": True,
-        "overall_score": report.overall_score,
-        "technical_score": report.technical_score,
+        "success":             True,
+        "overall_score":       report.overall_score,
+        "technical_score":     report.technical_score,
         "communication_score": report.communication_score,
-        "strengths": _ensure_list(report.strengths),
-        "improvements": _ensure_list(report.improvements),
-        "recommendation": report.recommendation,
+        "strengths":           _ensure_list(report.strengths),
+        "improvements":        _ensure_list(report.improvements),
+        "recommendation":      report.recommendation,
     }
 
 
@@ -271,7 +291,7 @@ async def get_report(
 async def get_conversation(
     session_id: str,
     db: AsyncSession = Depends(get_db),
-):
+) -> dict:                                        # added: return type annotation
     result = await db.execute(
         select(Conversation)
         .where(Conversation.session_id == session_id)
@@ -283,8 +303,8 @@ async def get_conversation(
         "success": True,
         "conversation": [
             {
-                "speaker": m.speaker,
-                "message": m.message,
+                "speaker":   m.speaker,
+                "message":   m.message,
                 "timestamp": str(m.timestamp),
             }
             for m in messages

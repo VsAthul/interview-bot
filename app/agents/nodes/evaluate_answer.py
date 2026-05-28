@@ -69,9 +69,7 @@ async def evaluate_answer_node(state: AgentState, config: RunnableConfig) -> Age
     feedback       = ""
     error: str | None = None          # ← captured locally, never written to state
 
-    # =====================================================================
     # EVALUATE ANSWER USING LLM
-    # =====================================================================
 
     try:
 
@@ -81,9 +79,7 @@ async def evaluate_answer_node(state: AgentState, config: RunnableConfig) -> Age
             role=state["candidate"]["role"],
         )
 
-        # ================================================================
         # SCORE
-        # ================================================================
 
         try:
             score = float(result.get("score", 50))
@@ -92,9 +88,7 @@ async def evaluate_answer_node(state: AgentState, config: RunnableConfig) -> Age
 
         feedback = result.get("feedback", "")
 
-        # ================================================================
         # ADAPTIVE DIFFICULTY
-        # ================================================================
 
         decision = result.get("decision", "maintain_difficulty")
         current  = state["difficulty"]
@@ -108,8 +102,9 @@ async def evaluate_answer_node(state: AgentState, config: RunnableConfig) -> Age
         else:
             new_difficulty = current
 
-        # ================================================================
         # BLOOM TAXONOMY ADAPTATION
+<<<<<<< HEAD
+=======
         # ================================================================
 
         idx = BLOOM_ORDER.index(current_bloom)
@@ -119,16 +114,39 @@ async def evaluate_answer_node(state: AgentState, config: RunnableConfig) -> Age
 
         elif score < 50 and idx > 0:
             new_bloom = BLOOM_ORDER[idx - 1]
+>>>>>>> dev
 
+        if current_bloom not in BLOOM_ORDER:
+            new_bloom = current_bloom  # preserve unknown value, skip adaptation
         else:
-            new_bloom = current_bloom
+            idx = BLOOM_ORDER.index(current_bloom)
+
+            if score >= 85 and idx < len(BLOOM_ORDER) - 1:
+                new_bloom = BLOOM_ORDER[idx + 1]
+            elif score < 50 and idx > 0:
+                new_bloom = BLOOM_ORDER[idx - 1]
+            else:
+                new_bloom = current_bloom
 
     except Exception as e:
+<<<<<<< HEAD
+
+        # SAFE FAILURE HANDLING
+
+        state["error"] = f"Answer evaluation failed: {str(e)}"
+
+        # DO NOT mutate interview progression on failed evaluation
+        return state
+
+
+    # UPDATE MEMORY STATE
+=======
         error = str(e)                # ← local var, not state mutation
 
     # =====================================================================
     # UPDATE MEMORY STATE — return new dict, never mutate state
     # =====================================================================
+>>>>>>> dev
 
     updated_conversation = state["conversation"] + [
         {
