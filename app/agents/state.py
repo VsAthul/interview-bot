@@ -1,5 +1,5 @@
 # app/agents/state.py
-from typing import TypedDict, List, Optional, Any, Literal
+from typing import TypedDict, List, Optional, Literal
 
 class AgentState(TypedDict):
     candidate_id:        str
@@ -34,5 +34,4 @@ class AgentState(TypedDict):
     # Final output
     report: Optional[dict]
 
-    # DB session injected at graph invocation
-    db: Any
+    error: Optional[str]

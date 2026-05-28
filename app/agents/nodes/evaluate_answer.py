@@ -6,7 +6,7 @@ from datetime import datetime
 from app.agents.state import AgentState
 from app.models import Conversation
 from app.services.groq_service import evaluate_answer
-
+from langchain_core.runnables import RunnableConfig
 
 # ============================================================================
 # BLOOM TAXONOMY ORDER
@@ -26,7 +26,7 @@ BLOOM_ORDER = [
 # EVALUATE ANSWER NODE
 # ============================================================================
 
-async def evaluate_answer_node(state: AgentState) -> AgentState:
+async def evaluate_answer_node(state: AgentState, config: RunnableConfig) -> AgentState:
     """
     Evaluates candidate answer.
 
@@ -38,7 +38,7 @@ async def evaluate_answer_node(state: AgentState) -> AgentState:
     - Update interview memory state
     """
 
-    db = state["db"]
+    db = config["configurable"]["db"]
 
     # =====================================================================
     # SAVE CANDIDATE ANSWER
@@ -62,18 +62,12 @@ async def evaluate_answer_node(state: AgentState) -> AgentState:
     # DEFAULT FALLBACKS
     # =====================================================================
 
-    score = 50.0
-
+    score        = 50.0
     new_difficulty = state["difficulty"]
-
-    current_bloom = state.get(
-        "bloom_level",
-        "understand",
-    )
-
-    new_bloom = current_bloom
-
-    feedback = ""
+    current_bloom  = state.get("bloom_level", "understand")
+    new_bloom      = current_bloom
+    feedback       = ""
+    error: str | None = None          # ← captured locally, never written to state
 
     # =====================================================================
     # EVALUATE ANSWER USING LLM
@@ -96,35 +90,20 @@ async def evaluate_answer_node(state: AgentState) -> AgentState:
         except (TypeError, ValueError):
             score = 50.0
 
-        feedback = result.get(
-            "feedback",
-            "",
-        )
+        feedback = result.get("feedback", "")
 
         # ================================================================
         # ADAPTIVE DIFFICULTY
         # ================================================================
 
-        decision = result.get(
-            "decision",
-            "maintain_difficulty",
-        )
-
-        current = state["difficulty"]
+        decision = result.get("decision", "maintain_difficulty")
+        current  = state["difficulty"]
 
         if decision == "increase_difficulty":
-
-            new_difficulty = {
-                "easy": "medium",
-                "medium": "hard",
-            }.get(current, "hard")
+            new_difficulty = {"easy": "medium", "medium": "hard"}.get(current, "hard")
 
         elif decision == "decrease_difficulty":
-
-            new_difficulty = {
-                "hard": "medium",
-                "medium": "easy",
-            }.get(current, "easy")
+            new_difficulty = {"hard": "medium", "medium": "easy"}.get(current, "easy")
 
         else:
             new_difficulty = current
@@ -135,48 +114,38 @@ async def evaluate_answer_node(state: AgentState) -> AgentState:
 
         idx = BLOOM_ORDER.index(current_bloom)
 
-        # Strong candidate → move cognitively upward
         if score >= 85 and idx < len(BLOOM_ORDER) - 1:
-
             new_bloom = BLOOM_ORDER[idx + 1]
 
-        # Weak candidate → move cognitively downward
         elif score < 50 and idx > 0:
-
             new_bloom = BLOOM_ORDER[idx - 1]
 
         else:
             new_bloom = current_bloom
 
     except Exception as e:
-
-        # ================================================================
-        # SAFE FALLBACK
-        # ================================================================
-
-        state["error"] = str(e)
+        error = str(e)                # ← local var, not state mutation
 
     # =====================================================================
-    # UPDATE MEMORY STATE
+    # UPDATE MEMORY STATE — return new dict, never mutate state
     # =====================================================================
 
     updated_conversation = state["conversation"] + [
         {
-            "question": state["current_question"],
-            "answer": state["candidate_answer"],
-            "score": score,
-            "feedback": feedback,
-            "difficulty": new_difficulty,
+            "question":    state["current_question"],
+            "answer":      state["candidate_answer"],
+            "score":       score,
+            "feedback":    feedback,
+            "difficulty":  new_difficulty,
             "bloom_level": new_bloom,
         }
     ]
 
-    state["scores"] = state["scores"] + [score]
-
-    state["difficulty"] = new_difficulty
-
-    state["bloom_level"] = new_bloom
-
-    state["conversation"] = updated_conversation
-
-    return state
+    return {
+        **state,
+        "scores":       state["scores"] + [score],
+        "difficulty":   new_difficulty,
+        "bloom_level":  new_bloom,
+        "conversation": updated_conversation,
+        "error":        error,        # None on success, str on failure
+    }
