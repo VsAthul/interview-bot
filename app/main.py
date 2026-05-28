@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import init_db
 from app.exceptions import register_exception_handlers
-from app.routers import candidate, interview, stt, tts, reflection
+from app.routers import candidate, interview, stt, tts
 
 
 os.makedirs("audio", exist_ok=True)
@@ -75,4 +75,3 @@ app.include_router(candidate.router)
 app.include_router(interview.router)
 app.include_router(stt.router)
 app.include_router(tts.router)
-app.include_router(reflection.router)

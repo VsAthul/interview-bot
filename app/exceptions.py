@@ -33,7 +33,9 @@ class GroqAPIError(Exception):
 class AudioDecodeError(Exception):
     pass
 
-
+class ReportNotFoundError(Exception):
+    def __init__(self, session_id: str):
+        self.session_id = session_id
 # Register all handlers on the FastAPI app 
 
 def register_exception_handlers(app: FastAPI)->None:
@@ -85,6 +87,12 @@ def register_exception_handlers(app: FastAPI)->None:
         return JSONResponse(status_code=400,
             content={"success": False,
                      "error": "Invalid audio data — could not decode base64"})
+
+    @app.exception_handler(ReportNotFoundError)
+    async def _(req: Request, exc: ReportNotFoundError):
+        return JSONResponse(status_code=404,
+            content={"success": False,
+                     "error": f"Report not found for session '{exc.session_id}'"})
 
     @app.exception_handler(Exception)
     async def _(req: Request, exc: Exception):

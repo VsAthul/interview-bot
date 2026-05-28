@@ -13,7 +13,6 @@ from langgraph.graph.state import CompiledStateGraph
 
 
 
-
 def route_phase(state: AgentState) -> str:
     """
     Routes graph execution based on workflow phase.
@@ -54,8 +53,7 @@ def route_after_completion(state: AgentState) -> str:
     )
 
 
-
-def build_interview_graph() -> CompiledStateGraph:
+def build_interview_graph()->CompiledStateGraph:
     g = StateGraph(AgentState)
 
 
@@ -75,11 +73,8 @@ def build_interview_graph() -> CompiledStateGraph:
         },
     )
 
-
     g.add_edge("load_candidate", "generate_question")
     g.add_edge("generate_question", END)
-
-   
 
     g.add_edge("evaluate_answer", "check_completion")
 
@@ -89,6 +84,7 @@ def build_interview_graph() -> CompiledStateGraph:
         {
             "generate_question": "generate_question",
             "generate_report": "generate_report",
+            END:END,
         },
     )
 
