@@ -38,7 +38,7 @@ class ReportNotFoundError(Exception):
         self.session_id = session_id
 # Register all handlers on the FastAPI app 
 
-def register_exception_handlers(app: FastAPI):
+def register_exception_handlers(app: FastAPI)->None:
 
     @app.exception_handler(CandidateNotFoundError)
     async def _(req: Request, exc: CandidateNotFoundError):
