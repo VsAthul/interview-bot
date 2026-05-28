@@ -85,7 +85,7 @@ interview bot/
 │   │   ├── interview.py            # POST session / start / submit-answer / end  GET report / conversation
 │   │   ├── stt.py                  # POST /api/stt — Sarvam speech-to-text
 │   │   ├── tts.py                  # POST /api/tts — Sarvam text-to-speech
-│   │   └── reflection.py           # GET /api/reflect — agent state introspection
+│   │   
 │   │
 │   └── services/
 │       ├── groq_service.py         # LLM wrappers: generate_interview_question, evaluate_answer, generate_final_report
@@ -142,16 +142,12 @@ Then open `http://localhost:8000` in your browser.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/api/candidate` | Register a new candidate |
-| `POST` | `/api/interview/session` | Create an interview session |
-| `POST` | `/api/interview/start` | Start the interview, get first question |
-| `POST` | `/api/interview/submit-answer` | Submit an answer, get next question or report |
-| `POST` | `/api/interview/end` | End interview early, trigger report |
+| `POST` | `/api/candidate/register` | Register a new candidate + create session |
+| `POST` | `/api/interview` | Start interview, submit answer, or end interview |
 | `GET`  | `/api/interview/report/{session_id}` | Retrieve the final report |
 | `GET`  | `/api/interview/conversation/{session_id}` | Retrieve full conversation log |
-| `POST` | `/api/stt` | Speech-to-text (audio → transcript) |
-| `POST` | `/api/tts` | Text-to-speech (text → WAV audio URL) |
-
+| `POST` | `/api/stt/transcribe` | Speech-to-text (audio → transcript) |
+| `POST` | `/api/tts/synthesize` | Text-to-speech (text → WAV audio URL) |
 ---
 
 ## Visuals
