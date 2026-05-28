@@ -33,6 +33,3 @@ class AgentState(TypedDict):
 
     # Final output
     report: Optional[dict]
-
-    # DB session injected at graph invocation
-    db: Any
