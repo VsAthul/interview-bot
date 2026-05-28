@@ -1,4 +1,3 @@
-import base64
 import httpx
 from app.config import settings
 from app.exceptions import SarvamAPIError, AudioDecodeError
@@ -6,12 +5,7 @@ from app.exceptions import SarvamAPIError, AudioDecodeError
 SARVAM_STT_URL = "https://api.sarvam.ai/speech-to-text"
 
 
-async def transcribe_audio(audio_base64: str) -> dict:
-    try:
-        audio_bytes = base64.b64decode(audio_base64)
-    except Exception:
-        raise AudioDecodeError()
-
+async def transcribe_audio(audio_bytes: bytes) -> dict:
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.post(

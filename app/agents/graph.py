@@ -9,7 +9,7 @@ from app.agents.nodes.generate_question import generate_question
 from app.agents.nodes.evaluate_answer import evaluate_answer_node
 from app.agents.nodes.check_completion import check_completion
 from app.agents.nodes.generate_report import generate_report
-
+from langgraph.graph.state import CompiledStateGraph
 
 
 
@@ -53,9 +53,7 @@ def route_after_completion(state: AgentState) -> str:
     )
 
 
-
-
-def build_interview_graph():
+def build_interview_graph()->CompiledStateGraph:
     g = StateGraph(AgentState)
 
 
@@ -75,11 +73,8 @@ def build_interview_graph():
         },
     )
 
-
     g.add_edge("load_candidate", "generate_question")
     g.add_edge("generate_question", END)
-
-   
 
     g.add_edge("evaluate_answer", "check_completion")
 
@@ -89,6 +84,7 @@ def build_interview_graph():
         {
             "generate_question": "generate_question",
             "generate_report": "generate_report",
+            END:END,
         },
     )
 

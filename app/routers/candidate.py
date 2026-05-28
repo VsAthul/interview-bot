@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database import get_db
-from app.models import Candidate
+from app.models import Candidate, InterviewSession
 from app.schemas import CandidateRegisterRequest
 from app.exceptions import DuplicateEmailError
 
@@ -31,10 +31,18 @@ async def register_candidate(
         skillset=data.skillset,
     )
     db.add(candidate)
+    await db.flush()  # get candidate_id before commit
+
+    session = InterviewSession(
+        session_id=f"SESS_{uuid.uuid4().hex[:8].upper()}",
+        candidate_id=candidate.candidate_id,
+    )
+    db.add(session)
     await db.commit()
 
     return {
         "success": True,
+        "session_id": session.session_id,
         "candidate_id": candidate.candidate_id,
         "message": "Candidate registered successfully",
     }
